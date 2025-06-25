@@ -7,145 +7,156 @@
   <meta name="Generator" content="Cocoa HTML Writer">
   <meta name="CocoaVersion" content="2575.6">
   <style type="text/css">
-    p.p1 {margin: 0.0px 0.0px 0.0px 0.0px; font: 12.0px Helvetica}
-    p.p2 {margin: 0.0px 0.0px 0.0px 0.0px; font: 12.0px Helvetica; min-height: 14.0px}
+    p.p1 {margin: 0.0px 0.0px 0.0px 0.0px; font: 14.0px Menlo; color: #cacaca; -webkit-text-stroke: #cacaca}
+    p.p2 {margin: 0.0px 0.0px 0.0px 0.0px; font: 14.0px Menlo; color: #71c083; -webkit-text-stroke: #71c083}
+    p.p3 {margin: 0.0px 0.0px 0.0px 0.0px; font: 14.0px Menlo; color: #cacaca; -webkit-text-stroke: #cacaca; min-height: 16.0px}
+    span.s1 {font-kerning: none; background-color: #171818}
+    span.s2 {font-kerning: none; color: #f67c30; background-color: #171818; -webkit-text-stroke: 0px #f67c30}
+    span.s3 {font-kerning: none; color: #d4d4d4; background-color: #171818; -webkit-text-stroke: 0px #d4d4d4}
+    span.s4 {font-kerning: none; color: #71c083; background-color: #171818; -webkit-text-stroke: 0px #71c083}
+    span.s5 {font-kerning: none; color: #cacaca; background-color: #171818; -webkit-text-stroke: 0px #cacaca}
+    span.s6 {font-kerning: none; color: #4689cc; background-color: #171818; -webkit-text-stroke: 0px #4689cc}
+    span.s7 {font-kerning: none}
+    span.s8 {font-kerning: none; color: #6d7378; background-color: #171818; -webkit-text-stroke: 0px #6d7378}
+    span.s9 {font-kerning: none; color: #b76ff7; background-color: #171818; -webkit-text-stroke: 0px #b76ff7}
   </style>
 </head>
 <body>
-<p class="p1">```html</p>
-<p class="p1">&lt;!-- index.html --&gt;</p>
-<p class="p1">&lt;!DOCTYPE html&gt;</p>
-<p class="p1">&lt;html lang="ru"&gt;</p>
-<p class="p1">&lt;head&gt;</p>
-<p class="p1"><span class="Apple-converted-space">    </span>&lt;meta charset="UTF-8"&gt;</p>
-<p class="p1"><span class="Apple-converted-space">    </span>&lt;meta name="viewport" content="width=device-width, initial-scale=1.0"&gt;</p>
-<p class="p1"><span class="Apple-converted-space">    </span>&lt;title&gt;iTSAR Founders' Circle&lt;/title&gt;</p>
-<p class="p1"><span class="Apple-converted-space">    </span>&lt;!-- Подключаем скрипт Telegram Web App --&gt;</p>
-<p class="p1"><span class="Apple-converted-space">    </span>&lt;script src="[https://telegram.org/js/telegram-web-app.js](https://telegram.org/js/telegram-web-app.js)"&gt;&lt;/script&gt;</p>
-<p class="p1"><span class="Apple-converted-space">    </span>&lt;style&gt;</p>
-<p class="p1"><span class="Apple-converted-space">        </span>@import url('[https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;display=swap](https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;display=swap)');</p>
-<p class="p2"><br></p>
-<p class="p1"><span class="Apple-converted-space">        </span>:root {</p>
-<p class="p1"><span class="Apple-converted-space">            </span>--tg-theme-bg-color: #ffffff;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>--tg-theme-text-color: #000000;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>--tg-theme-hint-color: #999999;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>--tg-theme-link-color: #007aff;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>--tg-theme-button-color: #007aff;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>--tg-theme-button-text-color: #ffffff;</p>
-<p class="p1"><span class="Apple-converted-space">        </span>}</p>
-<p class="p2"><br></p>
-<p class="p1"><span class="Apple-converted-space">        </span>body {</p>
-<p class="p1"><span class="Apple-converted-space">            </span>font-family: 'Inter', sans-serif;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>background-color: var(--tg-theme-bg-color);</p>
-<p class="p1"><span class="Apple-converted-space">            </span>color: var(--tg-theme-text-color);</p>
-<p class="p1"><span class="Apple-converted-space">            </span>margin: 0;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>padding: 20px;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>display: flex;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>flex-direction: column;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>align-items: center;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>justify-content: center;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>text-align: center;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>min-height: 95vh;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>box-sizing: border-box;</p>
-<p class="p1"><span class="Apple-converted-space">        </span>}</p>
-<p class="p2"><br></p>
-<p class="p1"><span class="Apple-converted-space">        </span>.container {</p>
-<p class="p1"><span class="Apple-converted-space">            </span>max-width: 400px;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>width: 100%;</p>
-<p class="p1"><span class="Apple-converted-space">        </span>}</p>
-<p class="p2"><br></p>
-<p class="p1"><span class="Apple-converted-space">        </span>.logo {</p>
-<p class="p1"><span class="Apple-converted-space">            </span>font-size: 36px;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>font-weight: 700;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>margin-bottom: 20px;</p>
-<p class="p1"><span class="Apple-converted-space">        </span>}</p>
-<p class="p2"><br></p>
-<p class="p1"><span class="Apple-converted-space">        </span>.welcome-title {</p>
-<p class="p1"><span class="Apple-converted-space">            </span>font-size: 24px;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>font-weight: 600;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>margin-bottom: 10px;</p>
-<p class="p1"><span class="Apple-converted-space">        </span>}</p>
-<p class="p2"><br></p>
-<p class="p1"><span class="Apple-converted-space">        </span>.user-info {</p>
-<p class="p1"><span class="Apple-converted-space">            </span>font-size: 16px;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>color: var(--tg-theme-hint-color);</p>
-<p class="p1"><span class="Apple-converted-space">            </span>margin-bottom: 30px;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>word-wrap: break-word;</p>
-<p class="p1"><span class="Apple-converted-space">        </span>}</p>
-<p class="p2"><br></p>
-<p class="p1"><span class="Apple-converted-space">        </span>.button {</p>
-<p class="p1"><span class="Apple-converted-space">            </span>background-color: var(--tg-theme-button-color);</p>
-<p class="p1"><span class="Apple-converted-space">            </span>color: var(--tg-theme-button-text-color);</p>
-<p class="p1"><span class="Apple-converted-space">            </span>border: none;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>padding: 15px 30px;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>border-radius: 12px;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>font-size: 16px;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>font-weight: 600;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>cursor: pointer;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>transition: transform 0.1s ease;</p>
-<p class="p1"><span class="Apple-converted-space">        </span>}</p>
-<p class="p2"><br></p>
-<p class="p1"><span class="Apple-converted-space">        </span>.button:active {</p>
-<p class="p1"><span class="Apple-converted-space">            </span>transform: scale(0.97);</p>
-<p class="p1"><span class="Apple-converted-space">        </span>}</p>
-<p class="p2"><br></p>
-<p class="p1"><span class="Apple-converted-space">    </span>&lt;/style&gt;</p>
-<p class="p1">&lt;/head&gt;</p>
-<p class="p1">&lt;body&gt;</p>
-<p class="p2"><br></p>
-<p class="p1"><span class="Apple-converted-space">    </span>&lt;div class="container"&gt;</p>
-<p class="p1"><span class="Apple-converted-space">        </span>&lt;div class="logo"&gt;iTSAR&lt;/div&gt;</p>
-<p class="p1"><span class="Apple-converted-space">        </span>&lt;h1 class="welcome-title"&gt;Добро пожаловать в Клуб Основателей&lt;/h1&gt;</p>
-<p class="p1"><span class="Apple-converted-space">        </span>&lt;p class="user-info" id="user-info-text"&gt;Загрузка данных пользователя...&lt;/p&gt;</p>
-<p class="p1"><span class="Apple-converted-space">        </span>&lt;button class="button" id="main-button"&gt;Начать&lt;/button&gt;</p>
-<p class="p1"><span class="Apple-converted-space">    </span>&lt;/div&gt;</p>
-<p class="p2"><br></p>
-<p class="p1"><span class="Apple-converted-space">    </span>&lt;script&gt;</p>
-<p class="p1"><span class="Apple-converted-space">        </span>// Инициализируем приложение Telegram</p>
-<p class="p1"><span class="Apple-converted-space">        </span>const tg = window.Telegram.WebApp;</p>
-<p class="p1"><span class="Apple-converted-space">        </span>tg.ready();</p>
-<p class="p2"><br></p>
-<p class="p1"><span class="Apple-converted-space">        </span>// Меняем цвет шапки и фона</p>
-<p class="p1"><span class="Apple-converted-space">        </span>tg.setHeaderColor('#1a1a1a');</p>
-<p class="p1"><span class="Apple-converted-space">        </span>tg.setBackgroundColor('#1a1a1a');</p>
-<p class="p2"><br></p>
-<p class="p1"><span class="Apple-converted-space">        </span>const userInfoText = document.getElementById('user-info-text');</p>
-<p class="p1"><span class="Apple-converted-space">        </span>const mainButton = document.getElementById('main-button');</p>
-<p class="p2"><br></p>
-<p class="p1"><span class="Apple-converted-space">        </span>// Проверяем, есть ли данные о пользователе</p>
-<p class="p1"><span class="Apple-converted-space">        </span>if (tg.initDataUnsafe &amp;&amp; tg.initDataUnsafe.user) {</p>
-<p class="p1"><span class="Apple-converted-space">            </span>const user = tg.initDataUnsafe.user;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>let welcomeMessage = `ID: ${user.id}`;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>if (user.first_name) {</p>
-<p class="p1"><span class="Apple-converted-space">                </span>welcomeMessage = `Привет, ${user.first_name}!`;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>}</p>
-<p class="p1"><span class="Apple-converted-space">            </span>userInfoText.textContent = `Вы вошли как ${user.username || user.first_name || 'пользователь'} (ID: ${user.id}).`;</p>
-<p class="p1"><span class="Apple-converted-space">            </span>mainButton.textContent = welcomeMessage;</p>
-<p class="p2"><br></p>
-<p class="p1"><span class="Apple-converted-space">        </span>} else {</p>
-<p class="p1"><span class="Apple-converted-space">            </span>userInfoText.textContent = "Не удалось загрузить данные. Пожалуйста, убедитесь, что вы открыли приложение внутри Telegram.";</p>
-<p class="p1"><span class="Apple-converted-space">            </span>mainButton.style.display = 'none';</p>
-<p class="p1"><span class="Apple-converted-space">        </span>}</p>
-<p class="p2"><br></p>
-<p class="p1"><span class="Apple-converted-space">        </span>// Пример взаимодействия: отправляем данные в бот</p>
-<p class="p1"><span class="Apple-converted-space">        </span>mainButton.addEventListener('click', () =&gt; {</p>
-<p class="p1"><span class="Apple-converted-space">            </span>const dataToSend = {</p>
-<p class="p1"><span class="Apple-converted-space">                </span>message: "Пользователь нажал 'Начать'",</p>
-<p class="p1"><span class="Apple-converted-space">                </span>userId: tg.initDataUnsafe.user ? tg.initDataUnsafe.user.id : null,</p>
-<p class="p1"><span class="Apple-converted-space">            </span>};</p>
-<p class="p1"><span class="Apple-converted-space">            </span>// Эта функция отправляет данные вашему боту</p>
-<p class="p1"><span class="Apple-converted-space">            </span>tg.sendData(JSON.stringify(dataToSend));</p>
-<p class="p2"><br></p>
-<p class="p1"><span class="Apple-converted-space">            </span>// Показываем всплывающее уведомление</p>
-<p class="p1"><span class="Apple-converted-space">            </span>tg.showPopup({</p>
-<p class="p1"><span class="Apple-converted-space">                </span>title: 'Отлично!',</p>
-<p class="p1"><span class="Apple-converted-space">                </span>message: 'Это начало большого пути. Скоро здесь появится анкета.',</p>
-<p class="p1"><span class="Apple-converted-space">                </span>buttons: [{type: 'ok', text: 'Понятно'}]</p>
-<p class="p1"><span class="Apple-converted-space">            </span>});</p>
-<p class="p1"><span class="Apple-converted-space">        </span>});</p>
-<p class="p2"><br></p>
-<p class="p1"><span class="Apple-converted-space">    </span>&lt;/script&gt;</p>
-<p class="p1">&lt;/body&gt;</p>
-<p class="p1">&lt;/html&gt;</p>
+<p class="p1"><span class="s1">&lt;!-- index.html --&gt;</span></p>
+<p class="p1"><span class="s1">&lt;!-- ВЕРСИЯ </span><span class="s2">2</span><span class="s3">:</span><span class="s1"> Исправлены некорректные ссылки в &lt;script&gt; и &lt;style&gt; --&gt;</span></p>
+<p class="p1"><span class="s1">&lt;!DOCTYPE html&gt;</span></p>
+<p class="p1"><span class="s1">&lt;html lang=</span><span class="s4">"ru"</span><span class="s1">&gt;</span></p>
+<p class="p1"><span class="s1">&lt;head&gt;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>&lt;meta charset=</span><span class="s4">"UTF-8"</span><span class="s1">&gt;</span></p>
+<p class="p2"><span class="s5"><span class="Apple-converted-space">    </span>&lt;meta name=</span><span class="s1">"viewport"</span><span class="s5"> content=</span><span class="s1">"width=device-width, initial-scale=1.0"</span><span class="s5">&gt;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>&lt;title&gt;iTSAR Founders</span><span class="s4">' Circle&lt;/title&gt;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>&lt;!-- Подключаем скрипт Telegram Web App --&gt;</span></p>
+<p class="p2"><span class="s5"><span class="Apple-converted-space">    </span>&lt;script src=</span><span class="s1">"[https://telegram.org/js/telegram-web-app.js](https://telegram.org/js/telegram-web-app.js)"</span><span class="s5">&gt;&lt;/script&gt;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>&lt;style&gt;</span></p>
+<p class="p2"><span class="s5"><span class="Apple-converted-space">        </span></span><span class="s6">@import</span><span class="s5"> url</span><span class="s3">(</span><span class="s1">'[https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;display=swap](https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;display=swap)'</span><span class="s3">);</span></p>
+<p class="p3"><span class="s7"></span><br></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span></span><span class="s3">:</span><span class="s1">root </span><span class="s3">{</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>--tg-theme-bg-color</span><span class="s3">:</span><span class="s1"> </span><span class="s8">#ffffff;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>--tg-theme-text-color</span><span class="s3">:</span><span class="s1"> </span><span class="s8">#000000;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>--tg-theme-hint-color</span><span class="s3">:</span><span class="s1"> </span><span class="s8">#999999;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>--tg-theme-link-color</span><span class="s3">:</span><span class="s1"> </span><span class="s8">#007aff;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>--tg-theme-button-color</span><span class="s3">:</span><span class="s1"> </span><span class="s8">#007aff;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>--tg-theme-button-text-color</span><span class="s3">:</span><span class="s1"> </span><span class="s8">#ffffff;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span></span><span class="s3">}</span></p>
+<p class="p3"><span class="s7"></span><br></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>body </span><span class="s3">{</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>font-family</span><span class="s3">:</span><span class="s1"> </span><span class="s4">'Inter'</span><span class="s3">,</span><span class="s1"> sans-serif</span><span class="s3">;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>background-color</span><span class="s3">:</span><span class="s1"> var</span><span class="s3">(</span><span class="s1">--tg-theme-bg-color</span><span class="s3">);</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>color</span><span class="s3">:</span><span class="s1"> var</span><span class="s3">(</span><span class="s1">--tg-theme-text-color</span><span class="s3">);</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>margin</span><span class="s3">:</span><span class="s1"> </span><span class="s2">0</span><span class="s3">;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>padding</span><span class="s3">:</span><span class="s1"> </span><span class="s2">20</span><span class="s1">px</span><span class="s3">;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>display</span><span class="s3">:</span><span class="s1"> flex</span><span class="s3">;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>flex-direction</span><span class="s3">:</span><span class="s1"> column</span><span class="s3">;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>align-items</span><span class="s3">:</span><span class="s1"> center</span><span class="s3">;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>justify-content</span><span class="s3">:</span><span class="s1"> center</span><span class="s3">;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>text-align</span><span class="s3">:</span><span class="s1"> center</span><span class="s3">;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span></span><span class="s9">min</span><span class="s1">-height</span><span class="s3">:</span><span class="s1"> </span><span class="s2">95</span><span class="s1">vh</span><span class="s3">;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>box-sizing</span><span class="s3">:</span><span class="s1"> border-box</span><span class="s3">;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span></span><span class="s3">}</span></p>
+<p class="p3"><span class="s7"></span><br></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>.container </span><span class="s3">{</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span></span><span class="s9">max</span><span class="s1">-width</span><span class="s3">:</span><span class="s1"> </span><span class="s2">400</span><span class="s1">px</span><span class="s3">;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>width</span><span class="s3">:</span><span class="s1"> </span><span class="s2">100</span><span class="s1">%</span><span class="s3">;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span></span><span class="s3">}</span></p>
+<p class="p3"><span class="s7"></span><br></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>.logo </span><span class="s3">{</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>font-size</span><span class="s3">:</span><span class="s1"> </span><span class="s2">36</span><span class="s1">px</span><span class="s3">;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>font-weight</span><span class="s3">:</span><span class="s1"> </span><span class="s2">700</span><span class="s3">;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>margin-bottom</span><span class="s3">:</span><span class="s1"> </span><span class="s2">20</span><span class="s1">px</span><span class="s3">;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span></span><span class="s3">}</span></p>
+<p class="p3"><span class="s7"></span><br></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>.welcome-title </span><span class="s3">{</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>font-size</span><span class="s3">:</span><span class="s1"> </span><span class="s2">24</span><span class="s1">px</span><span class="s3">;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>font-weight</span><span class="s3">:</span><span class="s1"> </span><span class="s2">600</span><span class="s3">;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>margin-bottom</span><span class="s3">:</span><span class="s1"> </span><span class="s2">10</span><span class="s1">px</span><span class="s3">;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span></span><span class="s3">}</span></p>
+<p class="p3"><span class="s7"></span><br></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>.user-info </span><span class="s3">{</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>font-size</span><span class="s3">:</span><span class="s1"> </span><span class="s2">16</span><span class="s1">px</span><span class="s3">;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>color</span><span class="s3">:</span><span class="s1"> var</span><span class="s3">(</span><span class="s1">--tg-theme-hint-color</span><span class="s3">);</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>margin-bottom</span><span class="s3">:</span><span class="s1"> </span><span class="s2">30</span><span class="s1">px</span><span class="s3">;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>word-wrap</span><span class="s3">:</span><span class="s1"> </span><span class="s9">break</span><span class="s1">-word</span><span class="s3">;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span></span><span class="s3">}</span></p>
+<p class="p3"><span class="s7"></span><br></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>.button </span><span class="s3">{</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>background-color</span><span class="s3">:</span><span class="s1"> var</span><span class="s3">(</span><span class="s1">--tg-theme-button-color</span><span class="s3">);</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>color</span><span class="s3">:</span><span class="s1"> var</span><span class="s3">(</span><span class="s1">--tg-theme-button-text-color</span><span class="s3">);</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>border</span><span class="s3">:</span><span class="s1"> none</span><span class="s3">;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>padding</span><span class="s3">:</span><span class="s1"> </span><span class="s2">15</span><span class="s1">px </span><span class="s2">30</span><span class="s1">px</span><span class="s3">;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>border-radius</span><span class="s3">:</span><span class="s1"> </span><span class="s2">12</span><span class="s1">px</span><span class="s3">;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>font-size</span><span class="s3">:</span><span class="s1"> </span><span class="s2">16</span><span class="s1">px</span><span class="s3">;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>font-weight</span><span class="s3">:</span><span class="s1"> </span><span class="s2">600</span><span class="s3">;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>cursor</span><span class="s3">:</span><span class="s1"> pointer</span><span class="s3">;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>transition</span><span class="s3">:</span><span class="s1"> transform </span><span class="s2">0.1</span><span class="s1">s ease</span><span class="s3">;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span></span><span class="s3">}</span></p>
+<p class="p3"><span class="s1"><span class="Apple-converted-space">        </span></span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>.button</span><span class="s3">:</span><span class="s1">active </span><span class="s3">{</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>transform</span><span class="s3">:</span><span class="s1"> scale</span><span class="s3">(</span><span class="s2">0.97</span><span class="s3">);</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span></span><span class="s3">}</span></p>
+<p class="p3"><span class="s7"></span><br></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>&lt;/style&gt;</span></p>
+<p class="p1"><span class="s1">&lt;/head&gt;</span></p>
+<p class="p1"><span class="s1">&lt;body&gt;</span></p>
+<p class="p3"><span class="s7"></span><br></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>&lt;div </span><span class="s9">class</span><span class="s1">=</span><span class="s4">"container"</span><span class="s1">&gt;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>&lt;div </span><span class="s9">class</span><span class="s1">=</span><span class="s4">"logo"</span><span class="s1">&gt;iTSAR&lt;/div&gt;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>&lt;h1 </span><span class="s9">class</span><span class="s1">=</span><span class="s4">"welcome-title"</span><span class="s1">&gt;Добро пожаловать в Клуб Основателей&lt;/h1&gt;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>&lt;p </span><span class="s9">class</span><span class="s1">=</span><span class="s4">"user-info"</span><span class="s1"> </span><span class="s9">id</span><span class="s1">=</span><span class="s4">"user-info-text"</span><span class="s1">&gt;Загрузка данных пользователя...&lt;/p&gt;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>&lt;button </span><span class="s9">class</span><span class="s1">=</span><span class="s4">"button"</span><span class="s1"> </span><span class="s9">id</span><span class="s1">=</span><span class="s4">"main-button"</span><span class="s1">&gt;Начать&lt;/button&gt;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>&lt;/div&gt;</span></p>
+<p class="p3"><span class="s7"></span><br></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>&lt;script&gt;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>// Инициализируем приложение Telegram</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>const tg = window.Telegram.WebApp</span><span class="s3">;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>tg.ready</span><span class="s3">();</span></p>
+<p class="p3"><span class="s7"></span><br></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>// Меняем цвет шапки и фона для соответствия теме Telegram</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>tg.setHeaderColor</span><span class="s3">(</span><span class="s4">'#1a1a1a'</span><span class="s3">);</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>tg.setBackgroundColor</span><span class="s3">(</span><span class="s4">'#1a1a1a'</span><span class="s3">);</span></p>
+<p class="p3"><span class="s7"></span><br></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>const userInfoText = document.getElementById</span><span class="s3">(</span><span class="s4">'user-info-text'</span><span class="s3">);</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>const mainButton = document.getElementById</span><span class="s3">(</span><span class="s4">'main-button'</span><span class="s3">);</span></p>
+<p class="p3"><span class="s7"></span><br></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>// Проверяем</span><span class="s3">,</span><span class="s1"> есть ли данные о пользователе</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span></span><span class="s9">if</span><span class="s1"> </span><span class="s3">(</span><span class="s1">tg.initDataUnsafe &amp;&amp; tg.initDataUnsafe.user</span><span class="s3">)</span><span class="s1"> </span><span class="s3">{</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>const user = tg.initDataUnsafe.user</span><span class="s3">;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>let welcomeMessage = `ID</span><span class="s3">:</span><span class="s1"> $</span><span class="s3">{</span><span class="s1">user.</span><span class="s9">id</span><span class="s3">}</span><span class="s1">`</span><span class="s3">;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span></span><span class="s9">if</span><span class="s1"> </span><span class="s3">(</span><span class="s1">user.first_name</span><span class="s3">)</span><span class="s1"> </span><span class="s3">{</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">                </span>welcomeMessage = `Привет</span><span class="s3">,</span><span class="s1"> $</span><span class="s3">{</span><span class="s1">user.first_name</span><span class="s3">}</span><span class="s1">!`</span><span class="s3">;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span></span><span class="s3">}</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>userInfoText.textContent = `Вы вошли как $</span><span class="s3">{</span><span class="s1">user.username || user.first_name || </span><span class="s4">'пользователь'</span><span class="s3">}</span><span class="s1"> </span><span class="s3">(</span><span class="s1">ID</span><span class="s3">:</span><span class="s1"> $</span><span class="s3">{</span><span class="s1">user.</span><span class="s9">id</span><span class="s3">})</span><span class="s1">.`</span><span class="s3">;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>mainButton.textContent = welcomeMessage</span><span class="s3">;</span></p>
+<p class="p3"><span class="s7"></span><br></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span></span><span class="s3">}</span><span class="s1"> </span><span class="s9">else</span><span class="s1"> </span><span class="s3">{</span></p>
+<p class="p2"><span class="s5"><span class="Apple-converted-space">            </span>userInfoText.textContent = </span><span class="s1">"Не удалось загрузить данные. Пожалуйста, убедитесь, что вы открыли приложение внутри Telegram."</span><span class="s3">;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>mainButton.style.display = </span><span class="s4">'none'</span><span class="s3">;</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span></span><span class="s3">}</span></p>
+<p class="p3"><span class="s1"><span class="Apple-converted-space">        </span></span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>// Пример взаимодействия</span><span class="s3">:</span><span class="s1"> отправляем данные в бот</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span>mainButton.addEventListener</span><span class="s3">(</span><span class="s4">'click'</span><span class="s3">,</span><span class="s1"> </span><span class="s3">()</span><span class="s1"> =&gt; </span><span class="s3">{</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>const dataToSend = </span><span class="s3">{</span></p>
+<p class="p2"><span class="s5"><span class="Apple-converted-space">                </span>message</span><span class="s3">:</span><span class="s5"> </span><span class="s1">"Пользователь нажал 'Начать'"</span><span class="s3">,</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">                </span>userId</span><span class="s3">:</span><span class="s1"> tg.initDataUnsafe.user ? tg.initDataUnsafe.user.</span><span class="s9">id</span><span class="s1"> </span><span class="s3">:</span><span class="s1"> null</span><span class="s3">,</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span></span><span class="s3">};</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>// Эта функция отправляет данные вашему боту</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>tg.sendData</span><span class="s3">(</span><span class="s1">JSON.stringify</span><span class="s3">(</span><span class="s1">dataToSend</span><span class="s3">));</span></p>
+<p class="p3"><span class="s7"></span><br></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>// Показываем всплывающее уведомление</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span>tg.showPopup</span><span class="s3">({</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">                </span>title</span><span class="s3">:</span><span class="s1"> </span><span class="s4">'Отлично!'</span><span class="s3">,</span></p>
+<p class="p2"><span class="s5"><span class="Apple-converted-space">                </span>message</span><span class="s3">:</span><span class="s5"> </span><span class="s1">'Это начало большого пути. Скоро здесь появится анкета.'</span><span class="s3">,</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">                </span>buttons</span><span class="s3">:</span><span class="s1"> </span><span class="s3">[{</span><span class="s9">type</span><span class="s3">:</span><span class="s1"> </span><span class="s4">'ok'</span><span class="s3">,</span><span class="s1"> text</span><span class="s3">:</span><span class="s1"> </span><span class="s4">'Понятно'</span><span class="s3">}]</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">            </span></span><span class="s3">});</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">        </span></span><span class="s3">});</span></p>
+<p class="p3"><span class="s7"></span><br></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>&lt;/script&gt;</span></p>
+<p class="p1"><span class="s1">&lt;/body&gt;</span></p>
+<p class="p1"><span class="s1">&lt;/html&gt;</span></p>
+<p class="p3"><span class="s7"></span><br></p>
 </body>
 </html>
