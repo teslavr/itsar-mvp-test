@@ -1,5 +1,5 @@
 <!-- index.html -->
-<!-- ВЕРСИЯ 4: Финальная чистая версия -->
+<!-- ВЕРСИЯ 5: Финальная, с добавленной логикой регистрации -->
 <!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -16,6 +16,7 @@
             background-color: var(--tg-theme-bg-color, #1a1a1a);
             color: var(--tg-theme-text-color, #ffffff);
             box-sizing: border-box;
+            transition: background-color 0.3s, color 0.3s;
         }
         .container { max-width: 400px; width: 100%; display: none; }
         .container.visible { display: block; }
@@ -26,10 +27,10 @@
             background-color: var(--tg-theme-button-color, #007aff);
             color: var(--tg-theme-button-text-color, #ffffff);
             border: none; padding: 15px 30px; border-radius: 12px;
-            font-size: 16px; font-weight: 600; cursor: pointer; transition: transform 0.1s ease;
+            font-size: 16px; font-weight: 600; cursor: pointer; transition: all 0.2s ease;
             width: 100%;
         }
-        .button:disabled { background-color: #cccccc; cursor: not-allowed; }
+        .button:disabled { background-color: #5e5e5e; color: #9e9e9e; cursor: not-allowed; }
         .button:active:not(:disabled) { transform: scale(0.97); }
     </style>
 </head>
@@ -84,18 +85,20 @@
                 return;
             }
 
-            const telegramId = tg.initDataUnsafe.user.id;
+            const user = tg.initDataUnsafe.user;
+            const telegramId = user.id;
             
             try {
                 const response = await fetch(`/api/user/status?telegram_id=${telegramId}`);
                 if (response.status === 200) {
                      const data = await response.json();
-                     document.getElementById('welcome-title').textContent = `Привет, ${tg.initDataUnsafe.user.first_name || 'Основатель'}!`;
+                     document.getElementById('welcome-title').textContent = `Привет, ${user.first_name || 'Основатель'}!`;
                      document.getElementById('user-info-text').textContent = `Ваш баланс: ${data.points} Очков. Код-приглашение: ${data.referral_code}`;
                      showScreen('main');
                 } else if (response.status === 404) {
                     const inviterCode = tg.initDataUnsafe.start_param;
-                    if (inviterCode) {
+                    // Для тестирования: если нет инвайт-кода, все равно показываем экран регистрации
+                    if (inviterCode || true) { // Убрать `|| true` для боевого режима
                         showScreen('register');
                     } else {
                         showScreen('error');
@@ -110,6 +113,55 @@
                  showScreen('error');
             }
         }
+
+        document.getElementById('register-button').addEventListener('click', async () => {
+            const registerButton = document.getElementById('register-button');
+            registerButton.disabled = true;
+            registerButton.textContent = 'Регистрация...';
+
+            const user = tg.initDataUnsafe.user;
+            const inviterCode = tg.initDataUnsafe.start_param;
+
+            try {
+                const response = await fetch('/api/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        telegram_id: user.id,
+                        username: user.username,
+                        first_name: user.first_name,
+                        inviter_code: inviterCode
+                    })
+                });
+
+                if (response.status === 201) {
+                    tg.showPopup({
+                        title: 'Успех!',
+                        message: 'Вы стали участником Клуба Основателей. Добро пожаловать!',
+                        buttons: [{ type: 'ok', text: 'Отлично' }]
+                    });
+                    setTimeout(() => window.location.reload(), 1000);
+                } else {
+                    const errorData = await response.json();
+                    tg.showPopup({
+                        title: 'Ошибка регистрации',
+                        message: `Не удалось зарегистрироваться. ${errorData.error || 'Попробуйте позже.'}`,
+                        buttons: [{ type: 'ok' }]
+                    });
+                    registerButton.disabled = false;
+                    registerButton.textContent = 'Вступить в Клуб';
+                }
+            } catch (error) {
+                tg.showPopup({
+                    title: 'Ошибка сети',
+                    message: `Не удалось связаться с сервером. ${error.message}`,
+                    buttons: [{ type: 'ok' }]
+                });
+                registerButton.disabled = false;
+                registerButton.textContent = 'Вступить в Клуб';
+            }
+        });
+        
         main();
     </script>
 </body>
