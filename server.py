@@ -1,71 +1,156 @@
 # server.py
-# Простейший веб-сервер на aiohttp для обслуживания Telegram Mini App
-# ВЕРСИЯ 2: С явным указанием Content-Type для исправления ошибки с отображением HTML-кода
+# ВЕРСИЯ 3: Добавлена база данных PostgreSQL и API для регистрации
 
 import os
-from aiohttp import web
 import logging
+import uuid
+from aiohttp import web
+import sqlalchemy
+from sqlalchemy.dialects.postgresql import UUID
+import databases
 
 # --- КОНФИГУРАЦИЯ ---
-BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', 'YOUR_TELEGRAM_BOT_TOKEN') 
-PORT = int(os.getenv('PORT', 8080))
+# Переменные окружения, которые мы настраиваем в Render
+DATABASE_URL = os.getenv("DATABASE_URL")
+BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN") 
+PORT = int(os.getenv("PORT", 8080))
 
 logging.basicConfig(level=logging.INFO)
 
-# --- ОБРАБОТЧИКИ ЗАПРОСОВ ---
+# --- НАСТРОЙКА БАЗЫ ДАННЫХ ---
+if not DATABASE_URL:
+    logging.error("Критическая ошибка: Переменная DATABASE_URL не установлена!")
+    # В реальном приложении здесь был бы выход, для простоты оставляем работать
+    database = None
+    metadata = None
+else:
+    database = databases.Database(DATABASE_URL)
+    metadata = sqlalchemy.MetaData()
 
-# Этот обработчик будет отдавать нашу главную HTML-страницу
-async def handle_index(request):
-    """
-    Отдает главный файл index.html, который и является нашим Mini App.
-    Явно указывает content_type='text/html', чтобы браузер отображал страницу, а не ее код.
-    """
-    logging.info("Отдаем index.html")
+    # Определяем структуру таблицы пользователей
+    users = sqlalchemy.Table(
+        "users",
+        metadata,
+        sqlalchemy.Column("id", UUID(as_uuid=True), primary_key=True, default=uuid.uuid4),
+        sqlalchemy.Column("telegram_id", sqlalchemy.BigInteger, unique=True, nullable=False),
+        sqlalchemy.Column("username", sqlalchemy.String, nullable=True),
+        sqlalchemy.Column("first_name", sqlalchemy.String, nullable=True),
+        sqlalchemy.Column("points", sqlalchemy.BigInteger, default=0),
+        sqlalchemy.Column("referral_code", sqlalchemy.String, unique=True, default=lambda: str(uuid.uuid4())),
+        sqlalchemy.Column("invited_by_id", UUID(as_uuid=True), sqlalchemy.ForeignKey("users.id"), nullable=True),
+        sqlalchemy.Column("created_at", sqlalchemy.DateTime, server_default=sqlalchemy.func.now()),
+    )
+
+# --- ОБРАБОТЧИКИ ЗАПРОСОВ (API) ---
+
+async def get_user_status(request):
+    """Проверяет, зарегистрирован ли пользователь"""
     try:
-        # Читаем файл и возвращаем его содержимое с правильным заголовком
+        telegram_id = int(request.query['telegram_id'])
+    except (KeyError, ValueError):
+        return web.json_response({'error': 'telegram_id не указан или некорректен'}, status=400)
+
+    query = users.select().where(users.c.telegram_id == telegram_id)
+    user = await database.fetch_one(query)
+
+    if user:
+        return web.json_response({
+            'status': 'registered',
+            'user_id': str(user['id']),
+            'points': user['points'],
+            'referral_code': user['referral_code']
+        })
+    else:
+        return web.json_response({'status': 'not_registered'}, status=404)
+
+
+async def register_user(request):
+    """Регистрирует нового пользователя по инвайт-коду"""
+    try:
+        data = await request.json()
+        telegram_id = data['telegram_id']
+        username = data.get('username')
+        first_name = data.get('first_name')
+        inviter_code = data.get('inviter_code')
+    except (KeyError, ValueError):
+        return web.json_response({'error': 'Некорректные данные запроса'}, status=400)
+
+    # 1. Проверяем, не зарегистрирован ли пользователь уже
+    existing_user_query = users.select().where(users.c.telegram_id == telegram_id)
+    if await database.fetch_one(existing_user_query):
+        return web.json_response({'error': 'Пользователь уже зарегистрирован'}, status=409)
+
+    # 2. Проверяем инвайт-код
+    inviter_id = None
+    if inviter_code:
+        inviter_query = users.select().where(users.c.referral_code == inviter_code)
+        inviter = await database.fetch_one(inviter_query)
+        if not inviter:
+            # Для MVP прощаем отсутствие инвайт-кода, чтобы можно было запустить систему
+            # В боевой версии здесь будет ошибка 'Инвайт-код не найден'
+            logging.warning(f"Инвайт-код '{inviter_code}' не найден. Регистрируем пользователя без инвайта.")
+        else:
+            inviter_id = inviter['id']
+    else:
+        # Для MVP разрешаем регистрацию без инвайта для первого пользователя
+        logging.info("Регистрация без инвайт-кода.")
+
+    # 3. Создаем нового пользователя
+    insert_query = users.insert().values(
+        telegram_id=telegram_id,
+        username=username,
+        first_name=first_name,
+        points=1000,  # Начальные очки за регистрацию
+        invited_by_id=inviter_id
+    )
+    user_id = await database.execute(insert_query)
+    logging.info(f"Зарегистрирован новый пользователь: tg_id={telegram_id}, id={user_id}")
+    
+    # 4. Если был инвайтер, можно начислить ему бонус (логика будет усложняться)
+    # ... (добавим позже)
+    
+    return web.json_response({'status': 'success', 'message': 'Пользователь успешно зарегистрирован'}, status=201)
+
+
+async def handle_index(request):
+    """Отдает главный файл index.html"""
+    try:
         with open('./index.html', 'r', encoding='utf-8') as f:
-            html_content = f.read()
-        return web.Response(text=html_content, content_type='text/html')
+            return web.Response(text=f.read(), content_type='text/html')
     except FileNotFoundError:
-        logging.error("Критическая ошибка: Файл index.html не найден в директории.")
         return web.Response(text="Ошибка 404: Главный файл приложения не найден.", status=404)
-    except Exception as e:
-        logging.error(f"Неизвестная ошибка при чтении index.html: {e}")
-        return web.Response(text="Внутренняя ошибка сервера.", status=500)
 
-# --- ЗАПУСК ВЕБ-СЕРВЕРА ---
+# --- УПРАВЛЕНИЕ ЖИЗНЕННЫМ ЦИКЛОМ ПРИЛОЖЕНИЯ ---
 
-# Создаем приложение
+async def on_startup(app):
+    """Выполняется при старте сервера"""
+    if database:
+        await database.connect()
+        # Создаем таблицу, если она не существует
+        engine = sqlalchemy.create_engine(DATABASE_URL)
+        metadata.create_all(engine)
+        logging.info("Подключение к базе данных установлено и таблицы проверены.")
+
+async def on_shutdown(app):
+    """Выполняется при остановке сервера"""
+    if database:
+        await database.disconnect()
+        logging.info("Подключение к базе данных закрыто.")
+
+
+# --- СБОРКА И ЗАПУСК ПРИЛОЖЕНИЯ ---
+
 app = web.Application()
 
-# Добавляем маршруты (роуты)
+# Добавляем маршруты
 app.router.add_get('/', handle_index)
+app.router.add_get('/api/user/status', get_user_status)
+app.router.add_post('/api/register', register_user)
 
-# Функция для запуска
-async def start_server():
-    """
-    Запускает веб-сервер.
-    """
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, '0.0.0.0', PORT)
-    await site.start()
-    logging.info(f"Сервер iTSAR запущен на порту {PORT}")
-    # В реальном приложении здесь будет бесконечный цикл
-    # Для простоты прототипа мы просто ждем
-    while True:
-        await asyncio.sleep(3600) # Держим сервер живым
+# Привязываем функции жизненного цикла
+app.on_startup.append(on_startup)
+app.on_shutdown.append(on_shutdown)
 
 if __name__ == "__main__":
-    # Установка зависимостей: pip install aiohttp
     import asyncio
-    logging.info("Запуск сервера...")
-    if not BOT_TOKEN or BOT_TOKEN == 'YOUR_TELEGRAM_BOT_TOKEN':
-        logging.error("!!! КРИТИЧЕСКАЯ ОШИБКА: Токен бота не найден. Убедитесь, что вы добавили переменную окружения TELEGRAM_BOT_TOKEN в настройках Render.")
-    else:
-        logging.info(f"Токен бота успешно загружен (первые 5 символов: {BOT_TOKEN[:5]}...).")
-    
-    try:
-        asyncio.run(start_server())
-    except KeyboardInterrupt:
-        logging.info("Сервер остановлен.")
+    web.run_app(app, port=PORT)

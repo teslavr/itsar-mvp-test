@@ -1,135 +1,188 @@
 <!-- index.html -->
-<!-- ВЕРСИЯ 2: Исправлены некорректные ссылки в <script> и <style> -->
+<!-- ВЕРСИЯ 4: Добавлена логика для регистрации и отображения разных состояний -->
 <!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>iTSAR Founders' Circle</title>
-    <!-- Подключаем скрипт Telegram Web App -->
     <script src="[https://telegram.org/js/telegram-web-app.js](https://telegram.org/js/telegram-web-app.js)"></script>
     <style>
         @import url('[https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap](https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap)');
-
-        :root {
-            --tg-theme-bg-color: #ffffff;
-            --tg-theme-text-color: #000000;
-            --tg-theme-hint-color: #999999;
-            --tg-theme-link-color: #007aff;
-            --tg-theme-button-color: #007aff;
-            --tg-theme-button-text-color: #ffffff;
-        }
-
         body {
-            font-family: 'Inter', sans-serif;
-            background-color: var(--tg-theme-bg-color);
-            color: var(--tg-theme-text-color);
-            margin: 0;
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            text-align: center;
-            min-height: 95vh;
+            font-family: 'Inter', sans-serif; margin: 0; padding: 20px;
+            display: flex; flex-direction: column; align-items: center;
+            justify-content: center; text-align: center; min-height: 95vh;
+            background-color: var(--tg-theme-bg-color, #ffffff);
+            color: var(--tg-theme-text-color, #000000);
             box-sizing: border-box;
         }
-
-        .container {
-            max-width: 400px;
+        .container { max-width: 400px; width: 100%; }
+        .logo { font-size: 36px; font-weight: 700; margin-bottom: 20px; }
+        .title { font-size: 24px; font-weight: 600; margin-bottom: 10px; }
+        .text { font-size: 16px; color: var(--tg-theme-hint-color, #999999); margin-bottom: 30px; }
+        .button {
+            background-color: var(--tg-theme-button-color, #007aff);
+            color: var(--tg-theme-button-text-color, #ffffff);
+            border: none; padding: 15px 30px; border-radius: 12px;
+            font-size: 16px; font-weight: 600; cursor: pointer; transition: transform 0.1s ease;
             width: 100%;
         }
-
-        .logo {
-            font-size: 36px;
-            font-weight: 700;
-            margin-bottom: 20px;
-        }
-
-        .welcome-title {
-            font-size: 24px;
-            font-weight: 600;
-            margin-bottom: 10px;
-        }
-
-        .user-info {
-            font-size: 16px;
-            color: var(--tg-theme-hint-color);
-            margin-bottom: 30px;
-            word-wrap: break-word;
-        }
-
-        .button {
-            background-color: var(--tg-theme-button-color);
-            color: var(--tg-theme-button-text-color);
-            border: none;
-            padding: 15px 30px;
-            border-radius: 12px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: transform 0.1s ease;
-        }
-        
-        .button:active {
-            transform: scale(0.97);
-        }
-
+        .button:disabled { background-color: #cccccc; cursor: not-allowed; }
+        .button:active:not(:disabled) { transform: scale(0.97); }
+        .hidden { display: none; }
     </style>
 </head>
 <body>
 
-    <div class="container">
+    <!-- 1. Экран загрузки (виден по умолчанию) -->
+    <div id="loading-screen" class="container">
         <div class="logo">iTSAR</div>
-        <h1 class="welcome-title">Добро пожаловать в Клуб Основателей</h1>
-        <p class="user-info" id="user-info-text">Загрузка данных пользователя...</p>
-        <button class="button" id="main-button">Начать</button>
+        <p class="text">Проверка вашего статуса...</p>
+    </div>
+
+    <!-- 2. Экран регистрации (скрыт) -->
+    <div id="register-screen" class="container hidden">
+        <div class="logo">iTSAR</div>
+        <h1 class="title">Добро пожаловать</h1>
+        <p class="text" id="register-text">Вы приглашены в Клуб Основателей. Нажмите, чтобы завершить регистрацию.</p>
+        <button class="button" id="register-button">Вступить в Клуб</button>
+    </div>
+
+    <!-- 3. Главный экран приложения (скрыт) -->
+    <div id="main-app-screen" class="container hidden">
+        <div class="logo">iTSAR</div>
+        <h1 class="title" id="welcome-title"></h1>
+        <p class="text" id="user-info-text"></p>
+        <button class="button" id="main-action-button">Перейти к анкете (скоро)</button>
+    </div>
+
+    <!-- 4. Экран ошибки/отказа (скрыт) -->
+    <div id="error-screen" class="container hidden">
+        <div class="logo">iTSAR</div>
+        <h1 class="title">Доступ Ограничен</h1>
+        <p class="text" id="error-text">Для вступления в Клуб Основателей требуется приглашение. Пожалуйста, используйте реферальную ссылку от действительного участника.</p>
     </div>
 
     <script>
-        // Инициализируем приложение Telegram
         const tg = window.Telegram.WebApp;
-        tg.ready();
 
-        // Меняем цвет шапки и фона для соответствия теме Telegram
-        tg.setHeaderColor('#1a1a1a');
-        tg.setBackgroundColor('#1a1a1a');
+        // --- Элементы UI ---
+        const screens = {
+            loading: document.getElementById('loading-screen'),
+            register: document.getElementById('register-screen'),
+            main: document.getElementById('main-app-screen'),
+            error: document.getElementById('error-screen'),
+        };
+        const registerButton = document.getElementById('register-button');
 
-        const userInfoText = document.getElementById('user-info-text');
-        const mainButton = document.getElementById('main-button');
-
-        // Проверяем, есть ли данные о пользователе
-        if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
-            const user = tg.initDataUnsafe.user;
-            let welcomeMessage = `ID: ${user.id}`;
-            if (user.first_name) {
-                welcomeMessage = `Привет, ${user.first_name}!`;
+        // --- Функция для смены экрана ---
+        function showScreen(screenName) {
+            Object.values(screens).forEach(screen => screen.classList.add('hidden'));
+            if (screens[screenName]) {
+                screens[screenName].classList.remove('hidden');
             }
-            userInfoText.textContent = `Вы вошли как ${user.username || user.first_name || 'пользователь'} (ID: ${user.id}).`;
-            mainButton.textContent = welcomeMessage;
-
-        } else {
-            userInfoText.textContent = "Не удалось загрузить данные. Пожалуйста, убедитесь, что вы открыли приложение внутри Telegram.";
-            mainButton.style.display = 'none';
         }
-        
-        // Пример взаимодействия: отправляем данные в бот
-        mainButton.addEventListener('click', () => {
-            const dataToSend = {
-                message: "Пользователь нажал 'Начать'",
-                userId: tg.initDataUnsafe.user ? tg.initDataUnsafe.user.id : null,
-            };
-            // Эта функция отправляет данные вашему боту
-            tg.sendData(JSON.stringify(dataToSend));
 
-            // Показываем всплывающее уведомление
-            tg.showPopup({
-                title: 'Отлично!',
-                message: 'Это начало большого пути. Скоро здесь появится анкета.',
-                buttons: [{type: 'ok', text: 'Понятно'}]
-            });
+        // --- Логика при загрузке приложения ---
+        async function main() {
+            tg.ready();
+            tg.expand();
+
+            if (!tg.initDataUnsafe || !tg.initDataUnsafe.user) {
+                document.getElementById('error-text').textContent = "Не удалось идентифицировать вас. Пожалуйста, откройте приложение внутри Telegram.";
+                showScreen('error');
+                return;
+            }
+
+            const user = tg.initDataUnsafe.user;
+            const telegramId = user.id;
+
+            try {
+                // Проверяем статус пользователя на нашем сервере
+                const response = await fetch(`/api/user/status?telegram_id=${telegramId}`);
+
+                if (response.status === 200) {
+                    // Пользователь уже зарегистрирован
+                    const data = await response.json();
+                    document.getElementById('welcome-title').textContent = `Привет, ${user.first_name || 'Основатель'}!`;
+                    document.getElementById('user-info-text').textContent = `Ваш баланс: ${data.points} Очков. Ваш код-приглашение: ${data.referral_code}`;
+                    showScreen('main');
+                } else if (response.status === 404) {
+                    // Пользователь не зарегистрирован, проверяем инвайт
+                    const inviterCode = tg.initDataUnsafe.start_param;
+                    if (inviterCode) {
+                        // Показываем экран регистрации
+                        document.getElementById('register-text').textContent = `Вы приглашены в Клуб Основателей. Нажмите, чтобы завершить регистрацию и получить приветственный бонус.`;
+                        showScreen('register');
+                    } else {
+                        // Нет инвайт-кода
+                        document.getElementById('error-text').textContent = "Для вступления в Клуб Основателей требуется приглашение. Пожалуйста, используйте реферальную ссылку от действительного участника.";
+                        showScreen('error');
+                    }
+                } else {
+                    // Другая ошибка сервера
+                    const errorData = await response.json();
+                    document.getElementById('error-text').textContent = `Ошибка сервера: ${errorData.error || response.statusText}`;
+                    showScreen('error');
+                }
+            } catch (error) {
+                document.getElementById('error-text').textContent = `Ошибка сети: ${error.message}. Не удалось связаться с сервером.`;
+                showScreen('error');
+            }
+        }
+
+        // --- Обработчик кнопки регистрации ---
+        registerButton.addEventListener('click', async () => {
+            registerButton.disabled = true;
+            registerButton.textContent = 'Регистрация...';
+
+            const user = tg.initDataUnsafe.user;
+            const inviterCode = tg.initDataUnsafe.start_param;
+
+            try {
+                const response = await fetch('/api/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        telegram_id: user.id,
+                        username: user.username,
+                        first_name: user.first_name,
+                        inviter_code: inviterCode
+                    })
+                });
+
+                if (response.status === 201) {
+                    tg.showPopup({
+                        title: 'Успех!',
+                        message: 'Вы стали участником Клуба Основателей. Добро пожаловать!',
+                        buttons: [{ type: 'ok', text: 'Отлично' }]
+                    });
+                    // Перезагружаем приложение, чтобы показать главный экран
+                    window.location.reload();
+                } else {
+                    const errorData = await response.json();
+                    tg.showPopup({
+                        title: 'Ошибка регистрации',
+                        message: `Не удалось зарегистрироваться. ${errorData.error || 'Попробуйте позже.'}`,
+                        buttons: [{ type: 'ok' }]
+                    });
+                    registerButton.disabled = false;
+                    registerButton.textContent = 'Вступить в Клуб';
+                }
+            } catch (error) {
+                tg.showPopup({
+                    title: 'Ошибка сети',
+                    message: `Не удалось связаться с сервером. ${error.message}`,
+                    buttons: [{ type: 'ok' }]
+                });
+                registerButton.disabled = false;
+                registerButton.textContent = 'Вступить в Клуб';
+            }
         });
 
+        // --- Запускаем приложение ---
+        main();
     </script>
 </body>
 </html>

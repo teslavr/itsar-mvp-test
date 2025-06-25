@@ -1,1 +1,3 @@
-aiohttp
+aiohttp
+databases[postgresql]
+sqlalchemy
