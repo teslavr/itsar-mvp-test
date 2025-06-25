@@ -1,4 +1,5 @@
-# ВЕРСИЯ 6: Добавлена полная логика регистрации
+# server.py
+# ВЕРСИЯ 7: Исправлена ошибка с генерацией ID пользователя при регистрации
 
 import os
 import logging
@@ -115,15 +116,21 @@ async def register_user(request):
 
     # 3. Создаем нового пользователя
     try:
+        # ИСПРАВЛЕНИЕ: Явно генерируем UUID и referral_code перед вставкой
+        new_user_id = uuid.uuid4()
+        new_referral_code = str(uuid.uuid4())
+
         insert_query = users.insert().values(
+            id=new_user_id,
             telegram_id=telegram_id,
             username=username,
             first_name=first_name,
             points=1000, # Начальные очки за регистрацию
+            referral_code=new_referral_code,
             invited_by_id=inviter_id
         )
-        user_id = await database.execute(insert_query)
-        logging.info(f"Зарегистрирован новый пользователь: tg_id={telegram_id}, id={user_id}")
+        await database.execute(insert_query)
+        logging.info(f"Зарегистрирован новый пользователь: tg_id={telegram_id}, id={new_user_id}")
     except Exception as e:
         logging.error(f"API: КРИТИЧЕСКАЯ ОШИБКА при записи в БД: {e}")
         return web.json_response({'error': 'Ошибка при записи в базу данных'}, status=500)
