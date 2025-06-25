@@ -1,5 +1,5 @@
 <!-- index.html -->
-<!-- ВЕРСИЯ 5: Финальная, с добавленной логикой регистрации -->
+<!-- ВЕРСИЯ 6: Финальная, 100% чистый HTML -->
 <!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -97,11 +97,12 @@
                      showScreen('main');
                 } else if (response.status === 404) {
                     const inviterCode = tg.initDataUnsafe.start_param;
-                    // Для тестирования: если нет инвайт-кода, все равно показываем экран регистрации
-                    if (inviterCode || true) { // Убрать `|| true` для боевого режима
+                    if (inviterCode) {
                         showScreen('register');
                     } else {
-                        showScreen('error');
+                        // Для тестирования первого пользователя, разрешаем регистрацию без кода
+                        console.log("Инвайт-код не найден, но для теста разрешаем регистрацию.");
+                        showScreen('register'); 
                     }
                 } else {
                      const errorData = await response.json();
@@ -120,7 +121,7 @@
             registerButton.textContent = 'Регистрация...';
 
             const user = tg.initDataUnsafe.user;
-            const inviterCode = tg.initDataUnsafe.start_param;
+            const inviterCode = tg.initDataUnsafe.start_param || null;
 
             try {
                 const response = await fetch('/api/register', {
