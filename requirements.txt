@@ -1,3 +1,4 @@
 aiohttp
 databases[postgresql]
 sqlalchemy
+psycopg2-binary
