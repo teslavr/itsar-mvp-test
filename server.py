@@ -16,7 +16,7 @@ import logging
 
 # --- КОНФИГУРАЦИЯ ---
 # ВАЖНО: Вставьте сюда токен, который вы получили от BotFather
-BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '8166250106:AAFplSP-kDulNCdw1D_tyLUxkZEnEfE_Nlc')
+BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', 'YOUR_TELEGRAM_BOT_TOKEN')
 PORT = int(os.getenv('PORT', 8080))
 
 logging.basicConfig(level=logging.INFO)
