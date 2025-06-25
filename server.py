@@ -1,5 +1,5 @@
 # server.py
-# ВЕРСИЯ 5: Финальная, с расширенным логгированием
+# ВЕРСИЯ 6: Добавлена полная логика регистрации
 
 import os
 import logging
@@ -79,9 +79,57 @@ async def get_user_status(request):
         return web.json_response({'status': 'not_registered'}, status=404)
 
 async def register_user(request):
-    """Регистрирует нового пользователя"""
-    # ... (логика регистрации осталась прежней)
-    pass
+    """Регистрирует нового пользователя по инвайт-коду"""
+    logging.info("API: /api/register вызван.")
+    
+    if not database:
+        logging.error("API: База данных не инициализирована для регистрации!")
+        return web.json_response({'error': 'Сервер временно недоступен (DB init failed)'}, status=503)
+
+    try:
+        data = await request.json()
+        telegram_id = data['telegram_id']
+        username = data.get('username')
+        first_name = data.get('first_name')
+        inviter_code = data.get('inviter_code')
+    except (KeyError, ValueError, TypeError):
+        logging.warning(f"API: Некорректные данные в теле запроса: {data}")
+        return web.json_response({'error': 'Некорректные данные запроса'}, status=400)
+
+    # 1. Проверяем, не зарегистрирован ли пользователь уже
+    existing_user_query = users.select().where(users.c.telegram_id == telegram_id)
+    if await database.fetch_one(existing_user_query):
+        return web.json_response({'error': 'Пользователь уже зарегистрирован'}, status=409)
+
+    # 2. Проверяем инвайт-код
+    inviter_id = None
+    if inviter_code:
+        inviter_query = users.select().where(users.c.referral_code == inviter_code)
+        inviter = await database.fetch_one(inviter_query)
+        if not inviter:
+            logging.warning(f"Инвайт-код '{inviter_code}' не найден. Для MVP регистрируем пользователя без инвайта.")
+        else:
+            inviter_id = inviter['id']
+            logging.info(f"Найден инвайтер с ID: {inviter_id}")
+    else:
+        logging.info("Регистрация без инвайт-кода (разрешено для MVP).")
+
+    # 3. Создаем нового пользователя
+    try:
+        insert_query = users.insert().values(
+            telegram_id=telegram_id,
+            username=username,
+            first_name=first_name,
+            points=1000, # Начальные очки за регистрацию
+            invited_by_id=inviter_id
+        )
+        user_id = await database.execute(insert_query)
+        logging.info(f"Зарегистрирован новый пользователь: tg_id={telegram_id}, id={user_id}")
+    except Exception as e:
+        logging.error(f"API: КРИТИЧЕСКАЯ ОШИБКА при записи в БД: {e}")
+        return web.json_response({'error': 'Ошибка при записи в базу данных'}, status=500)
+    
+    return web.json_response({'status': 'success', 'message': 'Пользователь успешно зарегистрирован'}, status=201)
 
 async def handle_index(request):
     """Отдает главный файл index.html"""
@@ -101,9 +149,9 @@ async def on_startup(app):
             engine = sqlalchemy.create_engine(DATABASE_URL)
             metadata.create_all(engine)
             logging.info("Подключение к базе данных установлено и таблицы проверены.")
+            app['database_connected'] = True
         except Exception as e:
             logging.critical(f"Не удалось подключиться к БД при старте: {e}")
-            # Это предотвратит запуск, если БД недоступна
             app['database_connected'] = False
     else:
         app['database_connected'] = False
@@ -117,9 +165,11 @@ async def on_shutdown(app):
 # --- СБОРКА И ЗАПУСК ПРИЛОЖЕНИЯ ---
 
 app = web.Application()
+
 app.router.add_get('/', handle_index)
 app.router.add_get('/api/user/status', get_user_status)
-# ... (остальные роуты)
+app.router.add_post('/api/register', register_user)
+
 app.on_startup.append(on_startup)
 app.on_shutdown.append(on_shutdown)
 
