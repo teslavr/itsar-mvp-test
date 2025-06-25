@@ -1,5 +1,5 @@
 <!-- index.html -->
-<!-- ВЕРСИЯ 6: Финальная, 100% чистый HTML -->
+<!-- ВЕРСИЯ 7: Финальная, 100% чистый HTML без Markdown -->
 <!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -97,12 +97,11 @@
                      showScreen('main');
                 } else if (response.status === 404) {
                     const inviterCode = tg.initDataUnsafe.start_param;
-                    if (inviterCode) {
+                    // Для тестирования первого пользователя, разрешаем регистрацию без кода
+                    if (inviterCode || true) { // Убрать `|| true` для боевого режима
                         showScreen('register');
                     } else {
-                        // Для тестирования первого пользователя, разрешаем регистрацию без кода
-                        console.log("Инвайт-код не найден, но для теста разрешаем регистрацию.");
-                        showScreen('register'); 
+                        showScreen('error');
                     }
                 } else {
                      const errorData = await response.json();
