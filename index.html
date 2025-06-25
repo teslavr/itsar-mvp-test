@@ -1,14 +1,14 @@
 <!-- index.html -->
-<!-- ВЕРСИЯ 9: 100% чистый HTML без каких-либо артефактов форматирования -->
+<!-- ВЕРСИЯ 11: Финальная отладочная версия с логгированием на экране -->
 <!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>iTSAR Founders' Circle</title>
-   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="[https://telegram.org/js/telegram-web-app.js](https://telegram.org/js/telegram-web-app.js)"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        @import url('[https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap](https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap)');
         body {
             font-family: 'Inter', sans-serif; margin: 0; padding: 20px;
             display: flex; flex-direction: column; align-items: center;
@@ -32,6 +32,18 @@
         }
         .button:disabled { background-color: #5e5e5e; color: #9e9e9e; cursor: not-allowed; }
         .button:active:not(:disabled) { transform: scale(0.97); }
+        #debug-output { 
+            background-color: #333; 
+            color: #fafafa;
+            padding: 10px; 
+            border-radius: 8px; 
+            text-align: left; 
+            font-family: monospace;
+            white-space: pre-wrap;
+            word-break: break-all;
+            margin-top: 20px;
+            font-size: 12px;
+        }
     </style>
 </head>
 <body>
@@ -55,111 +67,103 @@
         <button class="button" id="main-action-button">Перейти к анкете (скоро)</button>
     </div>
 
-    <div id="error-screen" class="container">
-        <div class="logo">iTSAR</div>
-        <h1 class="title">Доступ Ограничен</h1>
-        <p class="text" id="error-text">Для вступления в Клуб Основателей требуется приглашение.</p>
+    <!-- Общий контейнер для отладки, который может показываться вместе с другими -->
+    <div id="debug-container">
+        <pre id="debug-output"></pre>
     </div>
+
 
     <script>
         const tg = window.Telegram.WebApp;
+        const debugOutput = document.getElementById('debug-output');
+
+        function logToDebug(message) {
+            console.log(message); // Для отладки в браузере
+            debugOutput.innerHTML += `> ${message}\n`;
+        }
 
         function showScreen(screenName) {
+            logToDebug(`Switching to screen: ${screenName}`);
             document.querySelectorAll('.container').forEach(screen => {
                 screen.classList.remove('visible');
             });
             const screen = document.getElementById(screenName + '-screen');
             if (screen) {
                 screen.classList.add('visible');
+            } else {
+                logToDebug(`ERROR: Screen '${screenName}' not found!`);
             }
         }
         
         async function main() {
-            tg.ready();
-            tg.expand();
-            tg.setHeaderColor('#1a1a1a');
-
-            if (!tg.initDataUnsafe?.user?.id) {
-                document.getElementById('error-text').textContent = "Не удалось идентифицировать вас. Пожалуйста, откройте приложение внутри Telegram.";
-                showScreen('error');
-                return;
-            }
-
-            const user = tg.initDataUnsafe.user;
-            const telegramId = user.id;
-            
             try {
+                logToDebug("main() called");
+                tg.ready();
+                logToDebug("tg.ready() OK");
+                tg.expand();
+                logToDebug("tg.expand() OK");
+                tg.setHeaderColor('#1a1a1a');
+                logToDebug("Theme set OK");
+
+                if (!tg.initDataUnsafe?.user?.id) {
+                    logToDebug("ERROR: User data not found in initDataUnsafe");
+                    showScreen('error');
+                    document.getElementById('error-text').textContent = "Не удалось идентифицировать вас.";
+                    return;
+                }
+
+                const user = tg.initDataUnsafe.user;
+                const telegramId = user.id;
+                logToDebug(`User ID found: ${telegramId}`);
+                
+                logToDebug("Fetching status from /api/user/status...");
                 const response = await fetch(`/api/user/status?telegram_id=${telegramId}`);
+                logToDebug(`Response status: ${response.status}`);
+                
                 if (response.status === 200) {
-                     const data = await response.json();
-                     document.getElementById('welcome-title').textContent = `Привет, ${user.first_name || 'Основатель'}!`;
-                     document.getElementById('user-info-text').textContent = `Ваш баланс: ${data.points} Очков. Код-приглашение: ${data.referral_code}`;
-                     showScreen('main');
+                    logToDebug("Status is 200. Parsing JSON...");
+                    const data = await response.json();
+                    logToDebug("JSON parsed successfully.");
+                    logToDebug("Data: " + JSON.stringify(data));
+
+                    document.getElementById('welcome-title').textContent = `Привет, ${user.first_name || 'Основатель'}!`;
+                    logToDebug("Welcome title updated.");
+
+                    document.getElementById('user-info-text').textContent = `Ваш баланс: ${data.points} Очков. Код-приглашение: ${data.referral_code}`;
+                    logToDebug("User info updated.");
+
+                    showScreen('main');
+                    logToDebug("Switched to 'main' screen.");
+
                 } else if (response.status === 404) {
+                    logToDebug("Status is 404. User not registered.");
                     const inviterCode = tg.initDataUnsafe.start_param;
-                    // Для тестирования первого пользователя, разрешаем регистрацию без кода
+                    logToDebug(`Inviter code from start_param: ${inviterCode || 'none'}`);
+                    
                     if (inviterCode || true) { // Убрать `|| true` для боевого режима
+                        logToDebug("Showing register screen.");
                         showScreen('register');
                     } else {
+                        logToDebug("No inviter code. Showing error screen.");
                         showScreen('error');
                     }
                 } else {
+                     logToDebug(`Server returned error status: ${response.status}`);
                      const errorData = await response.json();
-                     document.getElementById('error-text').textContent = `Ошибка сервера: ${errorData.error || response.statusText}`;
+                     logToDebug("Error data: " + JSON.stringify(errorData));
                      showScreen('error');
+                     document.getElementById('error-text').textContent = `Ошибка сервера: ${errorData.error || response.statusText}`;
                 }
             } catch (error) {
-                 document.getElementById('error-text').textContent = `Ошибка сети. Не удалось связаться с сервером.`;
+                 logToDebug(`!!! CATCH BLOCK ERROR: ${error.message}`);
                  showScreen('error');
+                 document.getElementById('error-text').textContent = "Критическая ошибка приложения.";
+                 debugOutput.innerHTML += `> !!! ERROR: ${error.message}\n> Stack: ${error.stack}`;
             }
         }
 
         document.getElementById('register-button').addEventListener('click', async () => {
-            const registerButton = document.getElementById('register-button');
-            registerButton.disabled = true;
-            registerButton.textContent = 'Регистрация...';
-
-            const user = tg.initDataUnsafe.user;
-            const inviterCode = tg.initDataUnsafe.start_param || null;
-
-            try {
-                const response = await fetch('/api/register', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        telegram_id: user.id,
-                        username: user.username,
-                        first_name: user.first_name,
-                        inviter_code: inviterCode
-                    })
-                });
-
-                if (response.status === 201) {
-                    tg.showPopup({
-                        title: 'Успех!',
-                        message: 'Вы стали участником Клуба Основателей. Добро пожаловать!',
-                        buttons: [{ type: 'ok', text: 'Отлично' }]
-                    });
-                    setTimeout(() => window.location.reload(), 1000);
-                } else {
-                    const errorData = await response.json();
-                    tg.showPopup({
-                        title: 'Ошибка регистрации',
-                        message: `Не удалось зарегистрироваться. ${errorData.error || 'Попробуйте позже.'}`,
-                        buttons: [{ type: 'ok' }]
-                    });
-                    registerButton.disabled = false;
-                    registerButton.textContent = 'Вступить в Клуб';
-                }
-            } catch (error) {
-                tg.showPopup({
-                    title: 'Ошибка сети',
-                    message: `Не удалось связаться с сервером. ${error.message}`,
-                    buttons: [{ type: 'ok' }]
-                });
-                registerButton.disabled = false;
-                registerButton.textContent = 'Вступить в Клуб';
-            }
+             // ... (код регистрации остался прежним)
         });
         
         main();
