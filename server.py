@@ -88,29 +88,65 @@ async def get_user_status(request):
         return web.json_response({'status': 'not_registered'}, status=404)
 
 async def register_user(request):
-    if not database or not app.get('database_connected'): return web.json_response({'error': 'DB connection failed'}, status=503)
+    """Регистрирует нового пользователя и начисляет бонус пригласившему."""
+    logging.info("API: /api/register вызван.")
+    
+    if not database or not app.get('database_connected'):
+        return web.json_response({'error': 'DB connection failed'}, status=503)
+
     try:
         data = await request.json()
-        telegram_id, username, first_name, inviter_code = data['telegram_id'], data.get('username'), data.get('first_name'), data.get('inviter_code')
-    except Exception: return web.json_response({'error': 'Некорректные данные'}, status=400)
+        telegram_id = data['telegram_id']
+        username = data.get('username')
+        first_name = data.get('first_name')
+        inviter_code = data.get('inviter_code')
+    except Exception:
+        return web.json_response({'error': 'Некорректные данные'}, status=400)
     
+    # Проверяем, не зарегистрирован ли пользователь уже
     if await database.fetch_one(users.select().where(users.c.telegram_id == telegram_id)):
         return web.json_response({'error': 'Пользователь уже зарегистрирован'}, status=409)
     
-    inviter_id = None
-    if inviter_code:
-        inviter = await database.fetch_one(users.select().where(users.c.referral_code == inviter_code))
-        if inviter: inviter_id = inviter['id']
-    
-    try:
-        new_user_id, new_referral_code = uuid.uuid4(), str(uuid.uuid4())
-        insert_query = users.insert().values(id=new_user_id, telegram_id=telegram_id, username=username, first_name=first_name, points=1000, referral_code=new_referral_code, invited_by_id=inviter_id)
-        await database.execute(insert_query)
-        logging.info(f"Зарегистрирован новый пользователь: tg_id={telegram_id}")
-    except Exception as e:
-        logging.error(f"Ошибка БД при регистрации: {e}")
-        return web.json_response({'error': 'Ошибка при записи в БД'}, status=500)
-    
+    # Используем транзакцию для гарантии целостности данных
+    async with database.transaction():
+        try:
+            # 1. Ищем инвайтера и получаем его ID
+            inviter_id = None
+            if inviter_code:
+                inviter = await database.fetch_one(users.select().where(users.c.referral_code == inviter_code))
+                if inviter:
+                    inviter_id = inviter['id']
+                    logging.info(f"Найден инвайтер с ID: {inviter_id}")
+
+            # 2. Создаем нового пользователя
+            new_user_id = uuid.uuid4()
+            new_referral_code = str(uuid.uuid4())
+            insert_query = users.insert().values(
+                id=new_user_id,
+                telegram_id=telegram_id,
+                username=username,
+                first_name=first_name,
+                points=1000, # Начальные очки за регистрацию
+                referral_code=new_referral_code,
+                invited_by_id=inviter_id
+            )
+            await database.execute(insert_query)
+            logging.info(f"Зарегистрирован новый пользователь: tg_id={telegram_id}")
+
+            # 3. Если был инвайтер, начисляем ему бонус
+            if inviter_id:
+                bonus_points = 20000 # Бонус за реферала по нашей математике
+                update_query = users.update().where(users.c.id == inviter_id).values(
+                    points=users.c.points + bonus_points
+                )
+                await database.execute(update_query)
+                logging.info(f"Начислено {bonus_points} очков инвайтеру {inviter_id}")
+        
+        except Exception as e:
+            logging.error(f"Ошибка БД при регистрации или начислении бонуса: {e}")
+            # Транзакция автоматически откатится, если здесь произойдет ошибка
+            return web.json_response({'error': 'Ошибка при записи в БД'}, status=500)
+            
     return web.json_response({'status': 'success'}, status=201)
 
 async def get_genesis_questions(request):
