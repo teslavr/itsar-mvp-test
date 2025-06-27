@@ -123,18 +123,59 @@ async def get_genesis_questions(request):
 
 
 async def submit_answers(request):
-    """Принимает ответы от пользователя"""
+    """Принимает ответы, сохраняет их в БД и начисляет очки."""
+    logging.info("API: /api/submit_answers вызван.")
+    
+    if not database or not app.get('database_connected'):
+        return web.json_response({'error': 'DB connection failed'}, status=503)
+
     try:
         data = await request.json()
-        user_id = data.get('user_id')
-        answers = data.get('answers')
-        logging.info(f"API: /api/submit_answers вызван. Получены ответы от user_id: {user_id}")
-        logging.info(json.dumps(answers, indent=2, ensure_ascii=False))
-        # TODO: На следующем шаге здесь будет логика сохранения в БД и начисления очков
-        return web.json_response({'status': 'success', 'message': 'Ответы получены!'})
+        user_id_str = data.get('user_id')
+        user_answers = data.get('answers') # Это словарь {question_id: answer_text}
+        
+        if not user_id_str or not user_answers:
+            return web.json_response({'error': 'Отсутствует ID пользователя или ответы'}, status=400)
+        
+        user_id = uuid.UUID(user_id_str)
+
     except Exception as e:
-        logging.error(f"Ошибка при обработке ответов: {e}")
-        return web.json_response({'error': 'Ошибка на сервере'}, status=500)
+        logging.error(f"Ошибка парсинга JSON: {e}")
+        return web.json_response({'error': 'Некорректный формат запроса'}, status=400)
+
+    # Используем транзакцию, чтобы все операции были атомарными
+    async with database.transaction():
+        try:
+            # 1. Готовим ответы для пакетной вставки в БД
+            answers_to_insert = []
+            for q_id, answer_text in user_answers.items():
+                answers_to_insert.append({
+                    "user_id": user_id,
+                    "question_id": int(q_id),
+                    "answer_text": answer_text
+                })
+            
+            if answers_to_insert:
+                query = answers.insert()
+                await database.execute_many(query=query, values=answers_to_insert)
+                logging.info(f"Сохранено {len(answers_to_insert)} ответов для пользователя {user_id_str}")
+
+            # 2. Начисляем очки за ответы (по 100 очков за каждый ответ)
+            points_to_add = len(answers_to_insert) * 100
+            
+            # 3. Обновляем баланс пользователя
+            update_query = users.update().where(users.c.id == user_id).values(
+                points=users.c.points + points_to_add
+            )
+            await database.execute(update_query)
+            logging.info(f"Начислено {points_to_add} очков пользователю {user_id_str}")
+
+        except Exception as e:
+            logging.error(f"Критическая ошибка при сохранении ответов или начислении очков: {e}")
+            # Транзакция автоматически откатится в случае ошибки
+            return web.json_response({'error': 'Ошибка при работе с базой данных'}, status=500)
+            
+    return web.json_response({'status': 'success', 'message': f'Ответы сохранены! Начислено {points_to_add} очков.'})
 
 async def handle_index(request):
     """Отдает главный HTML файл"""
