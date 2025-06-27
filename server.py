@@ -1,5 +1,5 @@
 # server.py
-# ВЕРСИЯ 10: Вопросы теперь загружаются из questions.json
+# ВЕРСИЯ 11: Полная версия кода с загрузкой вопросов из questions.json
 
 import os
 import logging
@@ -42,14 +42,17 @@ metadata = sqlalchemy.MetaData()
 if DATABASE_URL:
     try:
         database = databases.Database(DATABASE_URL)
-        
         users = sqlalchemy.Table(
             "users", metadata,
             sqlalchemy.Column("id", UUID(as_uuid=True), primary_key=True, default=uuid.uuid4),
             sqlalchemy.Column("telegram_id", sqlalchemy.BigInteger, unique=True, nullable=False),
-            # ... остальные поля таблицы users
+            sqlalchemy.Column("username", sqlalchemy.String, nullable=True),
+            sqlalchemy.Column("first_name", sqlalchemy.String, nullable=True),
+            sqlalchemy.Column("points", sqlalchemy.BigInteger, default=0),
+            sqlalchemy.Column("referral_code", sqlalchemy.String, unique=True, default=lambda: str(uuid.uuid4())),
+            sqlalchemy.Column("invited_by_id", UUID(as_uuid=True), sqlalchemy.ForeignKey("users.id"), nullable=True),
+            sqlalchemy.Column("created_at", sqlalchemy.DateTime, server_default=sqlalchemy.func.now()),
         )
-        # ... остальные таблицы
     except Exception as e:
         logging.critical(f"Ошибка инициализации базы данных: {e}")
         database = None
@@ -58,6 +61,58 @@ else:
 
 
 # --- ОБРАБОТЧИКИ ЗАПРОСОВ (API) ---
+
+async def get_user_status(request):
+    """Проверяет, зарегистрирован ли пользователь."""
+    if not database or not app.get('database_connected'):
+        return web.json_response({'error': 'DB connection failed'}, status=503)
+    try:
+        telegram_id = int(request.query['telegram_id'])
+    except (KeyError, ValueError):
+        return web.json_response({'error': 'telegram_id не указан'}, status=400)
+    query = users.select().where(users.c.telegram_id == telegram_id)
+    try:
+        user = await database.fetch_one(query)
+    except Exception as e:
+        logging.error(f"Ошибка БД при проверке статуса: {e}")
+        return web.json_response({'error': 'Ошибка при обращении к БД'}, status=500)
+    if user:
+        return web.json_response({'status': 'registered', 'user_id': str(user['id']), 'points': user['points'], 'referral_code': user['referral_code']})
+    else:
+        return web.json_response({'status': 'not_registered'}, status=404)
+
+async def register_user(request):
+    """Регистрирует нового пользователя."""
+    if not database or not app.get('database_connected'):
+        return web.json_response({'error': 'DB connection failed'}, status=503)
+    try:
+        data = await request.json()
+        telegram_id = data['telegram_id']
+        username = data.get('username')
+        first_name = data.get('first_name')
+        inviter_code = data.get('inviter_code')
+    except Exception:
+        return web.json_response({'error': 'Некорректные данные'}, status=400)
+    
+    if await database.fetch_one(users.select().where(users.c.telegram_id == telegram_id)):
+        return web.json_response({'error': 'Пользователь уже зарегистрирован'}, status=409)
+    
+    inviter_id = None
+    if inviter_code:
+        inviter = await database.fetch_one(users.select().where(users.c.referral_code == inviter_code))
+        if inviter: inviter_id = inviter['id']
+    
+    try:
+        new_user_id = uuid.uuid4()
+        new_referral_code = str(uuid.uuid4())
+        insert_query = users.insert().values(id=new_user_id, telegram_id=telegram_id, username=username, first_name=first_name, points=1000, referral_code=new_referral_code, invited_by_id=inviter_id)
+        await database.execute(insert_query)
+        logging.info(f"Зарегистрирован новый пользователь: tg_id={telegram_id}")
+    except Exception as e:
+        logging.error(f"Ошибка БД при регистрации: {e}")
+        return web.json_response({'error': 'Ошибка при записи в БД'}, status=500)
+    
+    return web.json_response({'status': 'success'}, status=201)
 
 async def get_genesis_questions(request):
     """Отдает стартовый набор вопросов из загруженных данных"""
@@ -81,28 +136,37 @@ async def submit_answers(request):
         logging.error(f"Ошибка при обработке ответов: {e}")
         return web.json_response({'error': 'Ошибка на сервере'}, status=500)
 
-
-# ... (остальные обработчики: get_user_status, register_user, handle_index)
-async def get_user_status(request):
-    # ... код без изменений ...
-    pass
-async def register_user(request):
-    # ... код без изменений ...
-    pass
 async def handle_index(request):
-    # ... код без изменений ...
-    pass
+    """Отдает главный HTML файл"""
+    try:
+        with open('./index.html', 'r', encoding='utf-8') as f:
+            return web.Response(text=f.read(), content_type='text/html')
+    except FileNotFoundError:
+        return web.Response(text="404: Not Found", status=404)
 
 # --- УПРАВЛЕНИЕ ЖИЗНЕННЫМ ЦИКЛОМ ПРИЛОЖЕНИЯ ---
 async def on_startup(app):
-    # ... код без изменений ...
-    pass
+    """Выполняется при старте сервера"""
+    app['database_connected'] = False
+    if database:
+        try:
+            await database.connect()
+            engine = sqlalchemy.create_engine(DATABASE_URL)
+            metadata.create_all(engine)
+            logging.info("Подключение к базе данных установлено.")
+            app['database_connected'] = True
+        except Exception as e:
+            logging.critical(f"Не удалось подключиться к БД при старte: {e}")
+
 async def on_shutdown(app):
-    # ... код без изменений ...
-    pass
+    """Выполняется при остановке сервера"""
+    if database and database.is_connected:
+        await database.disconnect()
+        logging.info("Подключение к базе данных закрыто.")
 
 # --- СБОРКА И ЗАПУСК ПРИЛОЖЕНИЯ ---
 app = web.Application()
+
 app.router.add_get('/', handle_index)
 app.router.add_get('/api/user/status', get_user_status)
 app.router.add_post('/api/register', register_user)
@@ -113,5 +177,5 @@ app.on_startup.append(on_startup)
 app.on_shutdown.append(on_shutdown)
 
 if __name__ == "__main__":
+    import asyncio
     web.run_app(app, port=PORT, host='0.0.0.0')
-
