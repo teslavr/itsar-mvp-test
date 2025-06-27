@@ -35,6 +35,8 @@ database = None
 metadata = sqlalchemy.MetaData()
 
 # Определяем таблицы глобально, чтобы они были доступны везде
+# ЗАМЕНИТЬ ЭТОТ БЛОК В server.py
+
 users = sqlalchemy.Table(
     "users", metadata,
     sqlalchemy.Column("id", UUID(as_uuid=True), primary_key=True, default=uuid.uuid4),
@@ -44,6 +46,8 @@ users = sqlalchemy.Table(
     sqlalchemy.Column("points", sqlalchemy.BigInteger, default=0),
     sqlalchemy.Column("referral_code", sqlalchemy.String, unique=True, default=lambda: str(uuid.uuid4())),
     sqlalchemy.Column("invited_by_id", UUID(as_uuid=True), sqlalchemy.ForeignKey("users.id"), nullable=True),
+    # НОВОЕ ПОЛЕ:
+    sqlalchemy.Column("has_completed_genesis", sqlalchemy.Boolean, default=False, nullable=False),
     sqlalchemy.Column("created_at", sqlalchemy.DateTime, server_default=sqlalchemy.func.now()),
 )
 
@@ -72,6 +76,7 @@ else:
 # --- ОБРАБОТЧИКИ ЗАПРОСОВ (API) ---
 
 async def get_user_status(request):
+    """Проверяет, зарегистрирован ли пользователь."""
     if not database or not app.get('database_connected'): return web.json_response({'error': 'DB connection failed'}, status=503)
     try:
         telegram_id = int(request.query['telegram_id'])
@@ -83,7 +88,13 @@ async def get_user_status(request):
     except Exception as e: return web.json_response({'error': 'Ошибка при обращении к БД'}, status=500)
     
     if user:
-        return web.json_response({'status': 'registered', 'user_id': str(user['id']), 'points': user['points'], 'referral_code': user['referral_code']})
+        return web.json_response({
+            'status': 'registered', 
+            'user_id': str(user['id']), 
+            'points': user['points'], 
+            'referral_code': user['referral_code'],
+            'has_completed_genesis': user['has_completed_genesis'] # НОВОЕ ПОЛЕ В ОТВЕТЕ
+        })
     else:
         return web.json_response({'status': 'not_registered'}, status=404)
 
@@ -172,7 +183,10 @@ async def get_genesis_questions(request):
     return web.json_response(GENESIS_QUESTIONS)
 
 
+# ЗАМЕНИТЬ ЭТУ ФУНКЦИЮ В server.py
+
 async def submit_answers(request):
+    """Принимает ответы, сохраняет их в БД и начисляет очки."""
     logging.info("API: /api/submit_answers вызван.")
     if not database or not app.get('database_connected'): return web.json_response({'error': 'DB connection failed'}, status=503)
 
@@ -183,6 +197,31 @@ async def submit_answers(request):
         user_id = uuid.UUID(user_id_str)
     except Exception as e: return web.json_response({'error': 'Некорректный формат запроса'}, status=400)
 
+    async with database.transaction():
+        try:
+            # Проверяем, не отвечал ли пользователь уже
+            user_check = await database.fetch_one(users.select().where(users.c.id == user_id))
+            if user_check and user_check['has_completed_genesis']:
+                logging.warning(f"Пользователь {user_id_str} уже проходил Генезис-Профиль. Повторное начисление очков отменено.")
+                return web.json_response({'error': 'Вы уже проходили эту анкету'}, status=403) # 403 Forbidden
+
+            answers_to_insert = [{"user_id": user_id, "question_id": int(q_id), "answer_text": ans} for q_id, ans in user_answers.items()]
+            if answers_to_insert:
+                await database.execute_many(query=answers.insert(), values=answers_to_insert)
+            
+            points_to_add = 10000 # Бонус за прохождение Генезис-Профиля
+            # ИЗМЕНЕНИЕ: Обновляем и баланс, и статус прохождения
+            update_query = users.update().where(users.c.id == user_id).values(
+                points=users.c.points + points_to_add,
+                has_completed_genesis=True
+            )
+            await database.execute(update_query)
+            logging.info(f"Начислено {points_to_add} очков пользователю {user_id_str} за Генезис-Профиль.")
+        except Exception as e:
+            logging.error(f"Ошибка при сохранении ответов или начислении очков: {e}")
+            return web.json_response({'error': 'Ошибка при работе с БД'}, status=500)
+            
+    return web.json_response({'status': 'success', 'message': f'Ответы сохранены! Начислено {points_to_add} очков.'})
     async with database.transaction():
         try:
             answers_to_insert = [{"user_id": user_id, "question_id": int(q_id), "answer_text": ans} for q_id, ans in user_answers.items()]
