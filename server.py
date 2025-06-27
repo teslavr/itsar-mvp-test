@@ -187,7 +187,7 @@ async def handle_index(request):
 
 # --- УПРАВЛЕНИЕ ЖИЗНЕННЫМ ЦИКЛОМ ПРИЛОЖЕНИЯ ---
 async def on_startup(app):
-    """Выполняется при старте сервера"""
+    """Выполняется при старте сервера и заполняет таблицу с вопросами, если она пуста."""
     app['database_connected'] = False
     if database:
         try:
@@ -195,10 +195,25 @@ async def on_startup(app):
             engine = sqlalchemy.create_engine(DATABASE_URL)
             metadata.create_all(engine)
             logging.info("Подключение к базе данных установлено.")
+            
+            # Проверяем и заполняем таблицу с вопросами
+            count_query = sqlalchemy.select(sqlalchemy.func.count(questions.c.id))
+            count = await database.fetch_val(count_query)
+            if count == 0 and GENESIS_QUESTIONS:
+                logging.info("Таблица 'questions' пуста. Загружаем вопросы из questions.json...")
+                # Убираем лишние ключи, которых нет в таблице
+                questions_to_insert = [
+                    {"id": q["id"], "text": q["text"], "category": q["category"], "options": q.get("options")} 
+                    for q in GENESIS_QUESTIONS
+                ]
+                insert_query = questions.insert()
+                await database.execute_many(query=insert_query, values=questions_to_insert)
+                logging.info(f"Успешно загружено {len(questions_to_insert)} вопросов в БД.")
+
             app['database_connected'] = True
         except Exception as e:
-            logging.critical(f"Не удалось подключиться к БД при старte: {e}")
-
+            logging.critical(f"Не удалось подключиться к БД или загрузить вопросы при старте: {e}")
+            
 async def on_shutdown(app):
     """Выполняется при остановке сервера"""
     if database and database.is_connected:
