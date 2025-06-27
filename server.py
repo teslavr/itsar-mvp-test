@@ -139,7 +139,8 @@ async def register_user(request):
                 first_name=first_name,
                 points=1000, # Начальные очки за регистрацию
                 referral_code=new_referral_code,
-                invited_by_id=inviter_id
+                invited_by_id=inviter_id,
+                has_completed_genesis=False # ИСПРАВЛЕНИЕ: Добавили недостающее поле
             )
             await database.execute(insert_query)
             logging.info(f"Зарегистрирован новый пользователь: tg_id={telegram_id}")
