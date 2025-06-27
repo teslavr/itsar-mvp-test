@@ -184,60 +184,65 @@ async def get_genesis_questions(request):
     return web.json_response(GENESIS_QUESTIONS)
 
 
-# ЗАМЕНИТЬ ЭТУ ФУНКЦИЮ В server.py
-
 async def submit_answers(request):
-    """Принимает ответы, сохраняет их в БД и начисляет очки."""
+    """Принимает ответы, сохраняет их, начисляет очки пользователю и реферальный бонус."""
     logging.info("API: /api/submit_answers вызван.")
-    if not database or not app.get('database_connected'): return web.json_response({'error': 'DB connection failed'}, status=503)
+    if not database or not app.get('database_connected'):
+        return web.json_response({'error': 'DB connection failed'}, status=503)
 
     try:
         data = await request.json()
         user_id_str, user_answers = data.get('user_id'), data.get('answers')
-        if not user_id_str or not user_answers: return web.json_response({'error': 'Отсутствует ID или ответы'}, status=400)
+        if not user_id_str or not user_answers:
+            return web.json_response({'error': 'Отсутствует ID или ответы'}, status=400)
         user_id = uuid.UUID(user_id_str)
-    except Exception as e: return web.json_response({'error': 'Некорректный формат запроса'}, status=400)
+    except Exception:
+        return web.json_response({'error': 'Некорректный формат запроса'}, status=400)
 
     async with database.transaction():
         try:
-            # Проверяем, не отвечал ли пользователь уже
-            user_check = await database.fetch_one(users.select().where(users.c.id == user_id))
-            if user_check and user_check['has_completed_genesis']:
-                logging.warning(f"Пользователь {user_id_str} уже проходил Генезис-Профиль. Повторное начисление очков отменено.")
-                return web.json_response({'error': 'Вы уже проходили эту анкету'}, status=403) # 403 Forbidden
+            # 1. Проверяем пользователя и не отвечал ли он уже
+            user_check_query = users.select().where(users.c.id == user_id)
+            current_user = await database.fetch_one(user_check_query)
+            
+            if not current_user:
+                return web.json_response({'error': 'Пользователь не найден'}, status=404)
+            if current_user['has_completed_genesis']:
+                logging.warning(f"Пользователь {user_id_str} уже проходил Генезис-Профиль.")
+                return web.json_response({'error': 'Вы уже проходили эту анкету'}, status=403)
 
+            # 2. Сохраняем ответы в БД
             answers_to_insert = [{"user_id": user_id, "question_id": int(q_id), "answer_text": ans} for q_id, ans in user_answers.items()]
             if answers_to_insert:
                 await database.execute_many(query=answers.insert(), values=answers_to_insert)
             
-            points_to_add = 10000 # Бонус за прохождение Генезис-Профиля
-            # ИЗМЕНЕНИЕ: Обновляем и баланс, и статус прохождения
-            update_query = users.update().where(users.c.id == user_id).values(
-                points=users.c.points + points_to_add,
+            # 3. Начисляем очки самому пользователю за прохождение
+            points_for_genesis = 60000  # ИСПРАВЛЕНИЕ: Правильная сумма очков
+            
+            # 4. Обновляем статус и баланс текущего пользователя
+            update_user_query = users.update().where(users.c.id == user_id).values(
+                points=users.c.points + points_for_genesis,
                 has_completed_genesis=True
             )
-            await database.execute(update_query)
-            logging.info(f"Начислено {points_to_add} очков пользователю {user_id_str} за Генезис-Профиль.")
+            await database.execute(update_user_query)
+            logging.info(f"Начислено {points_for_genesis} очков пользователю {user_id_str} за Генезис-Профиль.")
+
+            # 5. ИСПРАВЛЕНИЕ: Начисляем реферальный бонус пригласившему
+            if current_user['invited_by_id']:
+                inviter_id = current_user['invited_by_id']
+                referral_bonus = 20000 # Бонус за реферала по нашей математике
+                update_inviter_query = users.update().where(users.c.id == inviter_id).values(
+                    points=users.c.points + referral_bonus
+                )
+                await database.execute(update_inviter_query)
+                logging.info(f"Начислено {referral_bonus} реферальных очков инвайтеру {inviter_id}")
+
         except Exception as e:
             logging.error(f"Ошибка при сохранении ответов или начислении очков: {e}")
             return web.json_response({'error': 'Ошибка при работе с БД'}, status=500)
             
-    return web.json_response({'status': 'success', 'message': f'Ответы сохранены! Начислено {points_to_add} очков.'})
-    async with database.transaction():
-        try:
-            answers_to_insert = [{"user_id": user_id, "question_id": int(q_id), "answer_text": ans} for q_id, ans in user_answers.items()]
-            if answers_to_insert:
-                await database.execute_many(query=answers.insert(), values=answers_to_insert)
-                logging.info(f"Сохранено {len(answers_to_insert)} ответов для {user_id_str}")
-            
-            points_to_add = len(answers_to_insert) * 100
-            await database.execute(users.update().where(users.c.id == user_id).values(points=users.c.points + points_to_add))
-            logging.info(f"Начислено {points_to_add} очков пользователю {user_id_str}")
-        except Exception as e:
-            logging.error(f"Ошибка при сохранении ответов или начислении очков: {e}")
-            return web.json_response({'error': 'Ошибка при работе с БД'}, status=500)
-            
-    return web.json_response({'status': 'success', 'message': f'Ответы сохранены! Начислено {points_to_add} очков.'})
+    return web.json_response({'status': 'success', 'message': f'Ответы сохранены! Начислено {points_for_genesis} очков.'})
+
 
 async def handle_index(request):
     try:
