@@ -175,44 +175,58 @@
             }
         }
         
-        async function main() {
-            showScreen('loading');
-            tg.ready();
-            tg.expand();
-            tg.setHeaderColor('#1a1a1a');
+       // ЗАМЕНИТЬ ЭТУ ФУНКЦИЮ В index.html
 
-            if (!tg.initDataUnsafe?.user?.id) {
-                ui.text.error.textContent = "Не удалось идентифицировать вас.";
-                showScreen('error');
-                return;
-            }
+async function main() {
+    showScreen('loading');
+    tg.ready();
+    tg.expand();
+    tg.setHeaderColor('#1a1a1a');
 
-            const user = tg.initDataUnsafe.user;
-            const telegramId = user.id;
-            
-            try {
-                const response = await fetch(`/api/user/status?telegram_id=${telegramId}`);
-                if (response.status === 200) {
-                     const data = await response.json();
-                     currentUserId = data.user_id;
-                     ui.text.welcomeTitle.textContent = `Привет, ${user.first_name || 'Основатель'}!`;
-                     ui.text.userInfo.textContent = `Ваш баланс: ${data.points} Очков.`;
-                     const referralLink = `https://t.me/${YOUR_BOT_USERNAME}?start=${data.referral_code}`;
-                     ui.inputs.referralLink.value = referralLink;
-                     showScreen('main');
-                } else if (response.status === 404) {
-                    if (tg.initDataUnsafe.start_param || true) { showScreen('register'); } // Убрать || true для прода
-                    else { ui.text.error.textContent = "Для вступления требуется приглашение."; showScreen('error'); }
-                } else {
-                     const errorData = await response.json();
-                     ui.text.error.textContent = `Ошибка сервера: ${errorData.error || response.statusText}`;
-                     showScreen('error');
-                }
-            } catch (error) {
-                 ui.text.error.textContent = `Ошибка сети. Не удалось связаться с сервером.`;
-                 showScreen('error');
-            }
+    if (!tg.initDataUnsafe?.user?.id) {
+        ui.text.error.textContent = "Не удалось идентифицировать вас.";
+        showScreen('error');
+        return;
+    }
+
+    const user = tg.initDataUnsafe.user;
+    const telegramId = user.id;
+    
+    try {
+        const response = await fetch(`/api/user/status?telegram_id=${telegramId}`);
+        if (response.status === 200) {
+             const data = await response.json();
+             currentUserId = data.user_id;
+             ui.text.welcomeTitle.textContent = `Привет, ${user.first_name || 'Основатель'}!`;
+             ui.text.userInfo.textContent = `Ваш баланс: ${data.points} Очков.`;
+             const referralLink = `https://t.me/${YOUR_BOT_USERNAME}?start=${data.referral_code}`;
+             ui.inputs.referralLink.value = referralLink;
+
+             // ИЗМЕНЕНИЕ: Проверяем, пройдена ли анкета
+             if (data.has_completed_genesis) {
+                ui.buttons.startQuestionnaire.textContent = 'Генезис-Профиль пройден ✓';
+                ui.buttons.startQuestionnaire.disabled = true;
+                ui.buttons.startQuestionnaire.style.backgroundColor = '#5e5e5e';
+             } else {
+                ui.buttons.startQuestionnaire.textContent = 'Пройти Генезис-Профиль';
+                ui.buttons.startQuestionnaire.disabled = false;
+                ui.buttons.startQuestionnaire.style.backgroundColor = '#31a853';
+             }
+
+             showScreen('main');
+        } else if (response.status === 404) {
+            if (tg.initDataUnsafe.start_param || true) { showScreen('register'); } // Убрать || true для прода
+            else { ui.text.error.textContent = "Для вступления требуется приглашение."; showScreen('error'); }
+        } else {
+             const errorData = await response.json();
+             ui.text.error.textContent = `Ошибка сервера: ${errorData.error || response.statusText}`;
+             showScreen('error');
         }
+    } catch (error) {
+         ui.text.error.textContent = `Ошибка сети. Не удалось связаться с сервером.`;
+         showScreen('error');
+    }
+}
 
         ui.buttons.startQuestionnaire.addEventListener('click', startQuestionnaire);
         ui.buttons.nextQuestion.addEventListener('click', nextQuestion);
