@@ -115,10 +115,34 @@ async def register_user(request):
     return web.json_response({'status': 'success'}, status=201)
 
 async def get_genesis_questions(request):
-    """Отдает стартовый набор вопросов из загруженных данных"""
+    """Отдает стартовый набор вопросов и заполняет БД, если она пуста."""
     logging.info("API: /api/genesis_questions вызван.")
+    if not database or not app.get('database_connected'):
+        return web.json_response({'error': 'DB connection failed'}, status=503)
+
+    try:
+        # Проверяем, есть ли вопросы в БД
+        count_query = sqlalchemy.select(sqlalchemy.func.count(questions.c.id))
+        count = await database.fetch_val(count_query)
+
+        # Если вопросов нет, заполняем их из файла
+        if count == 0 and GENESIS_QUESTIONS:
+            logging.info("Таблица 'questions' пуста. Загружаем вопросы из questions.json...")
+            questions_to_insert = [
+                {"id": q["id"], "text": q["text"], "category": q["category"], "options": q.get("options")} 
+                for q in GENESIS_QUESTIONS
+            ]
+            insert_query = questions.insert()
+            await database.execute_many(query=insert_query, values=questions_to_insert)
+            logging.info(f"Успешно загружено {len(questions_to_insert)} вопросов в БД.")
+
+    except Exception as e:
+        logging.error(f"Ошибка при проверке/загрузке вопросов в БД: {e}")
+        return web.json_response({'error': 'Не удалось подготовить вопросы'}, status=500)
+
     if not GENESIS_QUESTIONS:
         return web.json_response({'error': 'Вопросы не найдены на сервере'}, status=500)
+    
     return web.json_response(GENESIS_QUESTIONS)
 
 
@@ -187,32 +211,20 @@ async def handle_index(request):
 
 # --- УПРАВЛЕНИЕ ЖИЗНЕННЫМ ЦИКЛОМ ПРИЛОЖЕНИЯ ---
 async def on_startup(app):
-    """Выполняется при старте сервера и заполняет таблицу с вопросами, если она пуста."""
+    """Выполняется при старте сервера."""
     app['database_connected'] = False
     if database:
         try:
             await database.connect()
             engine = sqlalchemy.create_engine(DATABASE_URL)
+            # Эта команда создаст таблицы users, questions, answers, если их еще нет.
             metadata.create_all(engine)
-            logging.info("Подключение к базе данных установлено.")
-            
-            # Проверяем и заполняем таблицу с вопросами
-            count_query = sqlalchemy.select(sqlalchemy.func.count(questions.c.id))
-            count = await database.fetch_val(count_query)
-            if count == 0 and GENESIS_QUESTIONS:
-                logging.info("Таблица 'questions' пуста. Загружаем вопросы из questions.json...")
-                # Убираем лишние ключи, которых нет в таблице
-                questions_to_insert = [
-                    {"id": q["id"], "text": q["text"], "category": q["category"], "options": q.get("options")} 
-                    for q in GENESIS_QUESTIONS
-                ]
-                insert_query = questions.insert()
-                await database.execute_many(query=insert_query, values=questions_to_insert)
-                logging.info(f"Успешно загружено {len(questions_to_insert)} вопросов в БД.")
-
+            logging.info("Подключение к базе данных установлено и таблицы проверены.")
             app['database_connected'] = True
         except Exception as e:
-            logging.critical(f"Не удалось подключиться к БД или загрузить вопросы при старте: {e}")
+            logging.critical(f"Не удалось подключиться к БД при старте: {e}")
+    else:
+        logging.error("Переменная DATABASE_URL не найдена, сервер работает без БД.")
             
 async def on_shutdown(app):
     """Выполняется при остановке сервера"""
