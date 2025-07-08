@@ -46,8 +46,8 @@ users = sqlalchemy.Table(
     sqlalchemy.Column("points", sqlalchemy.BigInteger, default=0),
     sqlalchemy.Column("referral_code", sqlalchemy.String, unique=True, default=lambda: str(uuid.uuid4())),
     sqlalchemy.Column("invited_by_id", UUID(as_uuid=True), sqlalchemy.ForeignKey("users.id"), nullable=True),
-    # НОВОЕ ПОЛЕ:
     sqlalchemy.Column("has_completed_genesis", sqlalchemy.Boolean, default=False, nullable=False),
+    sqlalchemy.Column("is_searchable", sqlalchemy.Boolean, default=True, nullable=False),
     sqlalchemy.Column("created_at", sqlalchemy.DateTime, server_default=sqlalchemy.func.now()),
 )
 
@@ -274,6 +274,76 @@ app.router.add_get('/api/user/status', get_user_status)
 app.router.add_post('/api/register', register_user)
 app.router.add_get('/api/genesis_questions', get_genesis_questions)
 app.router.add_post('/api/submit_answers', submit_answers)
+
+app.on_startup.append(on_startup)
+app.on_shutdown.append(on_shutdown)
+
+async def update_user_settings(request):
+    """Обновляет настройки пользователя (например, видимость в поиске)."""
+    logging.info("API: /api/user/settings вызван.")
+    if not database or not app.get('database_connected'):
+        return web.json_response({'error': 'DB connection failed'}, status=503)
+
+    try:
+        data = await request.json()
+        user_id_str = data.get('user_id')
+        is_searchable = data.get('is_searchable')
+        
+        if user_id_str is None or is_searchable is None:
+            return web.json_response({'error': 'Отсутствуют необходимые параметры'}, status=400)
+        
+        user_id = uuid.UUID(user_id_str)
+        
+        update_query = users.update().where(users.c.id == user_id).values(
+            is_searchable=is_searchable
+        )
+        await database.execute(update_query)
+        logging.info(f"Настройки для пользователя {user_id_str} обновлены: is_searchable = {is_searchable}")
+        return web.json_response({'status': 'success'})
+
+    except Exception as e:
+        logging.error(f"Ошибка при обновлении настроек: {e}")
+        return web.json_response({'error': 'Ошибка на сервере'}, status=500)
+
+
+async def delete_user(request):
+    """Полностью удаляет пользователя и его данные."""
+    logging.info("API: /api/user/delete вызван.")
+    if not database or not app.get('database_connected'):
+        return web.json_response({'error': 'DB connection failed'}, status=503)
+
+    try:
+        data = await request.json()
+        user_id_str = data.get('user_id')
+        if not user_id_str:
+            return web.json_response({'error': 'Отсутствует ID пользователя'}, status=400)
+        
+        user_id = uuid.UUID(user_id_str)
+
+        async with database.transaction():
+            # Сначала удаляем связанные ответы, потом самого пользователя
+            await database.execute(answers.delete().where(answers.c.user_id == user_id))
+            await database.execute(users.delete().where(users.c.id == user_id))
+        
+        logging.info(f"Пользователь {user_id_str} и все его данные были удалены.")
+        return web.json_response({'status': 'success'})
+
+    except Exception as e:
+        logging.error(f"Ошибка при удалении пользователя: {e}")
+        return web.json_response({'error': 'Ошибка на сервере'}, status=500)
+
+
+# --- СБОРКА И ЗАПУСК ПРИЛОЖЕНИЯ ---
+app = web.Application()
+
+# ОБНОВЛЕННЫЙ СПИСОК МАРШРУТОВ
+app.router.add_get('/', handle_index)
+app.router.add_get('/api/user/status', get_user_status)
+app.router.add_post('/api/register', register_user)
+app.router.add_get('/api/genesis_questions', get_genesis_questions)
+app.router.add_post('/api/submit_answers', submit_answers)
+app.router.add_post('/api/user/settings', update_user_settings) # Новый маршрут
+app.router.add_post('/api/user/delete', delete_user)       # Новый маршрут
 
 app.on_startup.append(on_startup)
 app.on_shutdown.append(on_shutdown)
