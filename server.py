@@ -104,6 +104,20 @@ async def get_user_status(request):
     else:
         return web.json_response({'status': 'not_registered'}, status=404)
 
+# ДОБАВИТЬ ЭТУ НОВУЮ ФУНКЦИЮ В server.py
+
+async def get_user_count(request):
+    """Возвращает общее количество зарегистрированных пользователей."""
+    if not database or not app.get('database_connected'):
+        return web.json_response({'error': 'DB connection failed'}, status=503)
+    try:
+        query = sqlalchemy.select(sqlalchemy.func.count(users.c.id))
+        count = await database.fetch_val(query)
+        return web.json_response({'count': count})
+    except Exception as e:
+        logging.error(f"Ошибка при подсчете пользователей: {e}")
+        return web.json_response({'error': 'Ошибка на сервере'}, status=500)
+
 async def register_user(request):
     """Регистрирует нового пользователя, проверяет и списывает инвайт."""
     logging.info("API: /api/register вызван.")
@@ -336,15 +350,14 @@ async def delete_user(request):
 
 # --- СБОРКА И ЗАПУСК ПРИЛОЖЕНИЯ ---
 app = web.Application()
-
-# ОБНОВЛЕННЫЙ СПИСОК МАРШРУТОВ
 app.router.add_get('/', handle_index)
 app.router.add_get('/api/user/status', get_user_status)
 app.router.add_post('/api/register', register_user)
 app.router.add_get('/api/genesis_questions', get_genesis_questions)
 app.router.add_post('/api/submit_answers', submit_answers)
-app.router.add_post('/api/user/settings', update_user_settings) # Новый маршрут
-app.router.add_post('/api/user/delete', delete_user)       # Новый маршрут
+app.router.add_post('/api/user/settings', update_user_settings)
+app.router.add_post('/api/user/delete', delete_user)
+app.router.add_get('/api/user_count', get_user_count) # <-- ВОТ НОВЫЙ МАРШРУТ
 
 app.on_startup.append(on_startup)
 app.on_shutdown.append(on_shutdown)
