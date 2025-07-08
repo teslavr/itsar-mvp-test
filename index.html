@@ -1,4 +1,4 @@
-<!-- ВЕРСИЯ 18: Добавлен экран настроек -->
+<!-- ВЕРСИЯ 19: Восстановлена логика кнопки регистрации -->
 <!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -99,7 +99,7 @@
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ user_id: currentUserId })
                     });
-                    tg.showAlert("Ваш профиль был удален. Вы будете перенаправлены на экран регистрации.");
+                    tg.showAlert("Ваш профиль был удален.");
                     setTimeout(() => window.location.reload(), 2000);
                 }
             });
@@ -155,7 +155,35 @@
         ui.buttons.back.addEventListener('click', () => showScreen('main'));
         ui.toggles.searchable.addEventListener('change', updateSettings);
         ui.buttons.deleteProfile.addEventListener('click', deleteProfile);
-        // ... (остальные обработчики)
+        
+        // ВОТ ЭТОТ БЛОК БЫЛ ПРОПУЩЕН:
+        ui.buttons.register.addEventListener('click', async () => {
+            const registerButton = ui.buttons.register;
+            registerButton.disabled = true;
+            registerButton.textContent = 'Регистрация...';
+            const user = tg.initDataUnsafe.user;
+            const inviterCode = tg.initDataUnsafe.start_param || null;
+            try {
+                const response = await fetch('/api/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ telegram_id: user.id, username: user.username, first_name: user.first_name, inviter_code: inviterCode })
+                });
+                if (response.status === 201) {
+                    tg.showPopup({ title: 'Успех!', message: 'Вы стали участником Клуба Основателей!', buttons: [{ type: 'ok', text: 'Отлично' }] });
+                    setTimeout(() => window.location.reload(), 1500);
+                } else {
+                    const errorData = await response.json();
+                    tg.showPopup({ title: 'Ошибка регистрации', message: `Не удалось зарегистрироваться. ${errorData.error || 'Попробуйте позже.'}`});
+                    registerButton.disabled = false;
+                    registerButton.textContent = 'Вступить в Клуб';
+                }
+            } catch (error) {
+                tg.showPopup({ title: 'Ошибка сети', message: `Не удалось связаться с сервером.` });
+                registerButton.disabled = false;
+                registerButton.textContent = 'Вступить в Клуб';
+            }
+        });
         
         main();
     </script>
