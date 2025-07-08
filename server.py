@@ -48,6 +48,8 @@ users = sqlalchemy.Table(
     sqlalchemy.Column("invited_by_id", UUID(as_uuid=True), sqlalchemy.ForeignKey("users.id"), nullable=True),
     sqlalchemy.Column("has_completed_genesis", sqlalchemy.Boolean, default=False, nullable=False),
     sqlalchemy.Column("is_searchable", sqlalchemy.Boolean, default=True, nullable=False),
+    # НОВОЕ ПОЛЕ:
+    sqlalchemy.Column("invites_left", sqlalchemy.Integer, default=5, nullable=False),
     sqlalchemy.Column("created_at", sqlalchemy.DateTime, server_default=sqlalchemy.func.now()),
 )
 
@@ -75,6 +77,8 @@ else:
 
 # --- ОБРАБОТЧИКИ ЗАПРОСОВ (API) ---
 
+# ЗАМЕНИТЬ ЭТУ ФУНКЦИЮ В server.py
+
 async def get_user_status(request):
     """Проверяет, зарегистрирован ли пользователь."""
     if not database or not app.get('database_connected'): return web.json_response({'error': 'DB connection failed'}, status=503)
@@ -93,71 +97,67 @@ async def get_user_status(request):
             'user_id': str(user['id']), 
             'points': user['points'], 
             'referral_code': user['referral_code'],
-            'has_completed_genesis': user['has_completed_genesis'] # НОВОЕ ПОЛЕ В ОТВЕТЕ
+            'has_completed_genesis': user['has_completed_genesis'],
+            'is_searchable': user['is_searchable'],
+            'invites_left': user['invites_left'] # НОВОЕ ПОЛЕ В ОТВЕТЕ
         })
     else:
         return web.json_response({'status': 'not_registered'}, status=404)
 
 async def register_user(request):
-    """Регистрирует нового пользователя и начисляет бонус пригласившему."""
+    """Регистрирует нового пользователя, проверяет и списывает инвайт."""
     logging.info("API: /api/register вызван.")
-    
-    if not database or not app.get('database_connected'):
-        return web.json_response({'error': 'DB connection failed'}, status=503)
+    if not database or not app.get('database_connected'): return web.json_response({'error': 'DB connection failed'}, status=503)
 
     try:
         data = await request.json()
-        telegram_id = data['telegram_id']
-        username = data.get('username')
-        first_name = data.get('first_name')
-        inviter_code = data.get('inviter_code')
-    except Exception:
-        return web.json_response({'error': 'Некорректные данные'}, status=400)
+        telegram_id, inviter_code = data['telegram_id'], data.get('inviter_code')
+    except Exception: return web.json_response({'error': 'Некорректные данные'}, status=400)
     
-    # Проверяем, не зарегистрирован ли пользователь уже
     if await database.fetch_one(users.select().where(users.c.telegram_id == telegram_id)):
         return web.json_response({'error': 'Пользователь уже зарегистрирован'}, status=409)
     
-    # Используем транзакцию для гарантии целостности данных
     async with database.transaction():
         try:
-            # 1. Ищем инвайтера и получаем его ID
             inviter_id = None
-            if inviter_code:
-                inviter = await database.fetch_one(users.select().where(users.c.referral_code == inviter_code))
-                if inviter:
-                    inviter_id = inviter['id']
-                    logging.info(f"Найден инвайтер с ID: {inviter_id}")
+            # Для первого пользователя инвайт не нужен
+            user_count = await database.fetch_val(sqlalchemy.select(sqlalchemy.func.count(users.c.id)))
+            
+            if user_count > 0:
+                if not inviter_code:
+                    return web.json_response({'error': 'Требуется код-приглашение'}, status=403)
+                
+                inviter_query = users.select().where(users.c.referral_code == inviter_code)
+                inviter = await database.fetch_one(inviter_query)
 
-            # 2. Создаем нового пользователя
+                if not inviter:
+                    return web.json_response({'error': 'Код-приглашение недействителен'}, status=403)
+                if inviter['invites_left'] <= 0:
+                    return web.json_response({'error': 'У пригласившего закончились инвайты'}, status=403)
+                
+                inviter_id = inviter['id']
+                # Списываем инвайт у пригласившего
+                await database.execute(users.update().where(users.c.id == inviter_id).values(invites_left=users.c.invites_left - 1))
+                logging.info(f"Списан 1 инвайт у пользователя {inviter_id}")
+
+            # Регистрируем нового пользователя
             new_user_id = uuid.uuid4()
-            new_referral_code = str(uuid.uuid4())
-            insert_query = users.insert().values(
+            await database.execute(users.insert().values(
                 id=new_user_id,
                 telegram_id=telegram_id,
-                username=username,
-                first_name=first_name,
-                points=1000, # Начальные очки за регистрацию
-                referral_code=new_referral_code,
+                username=data.get('username'),
+                first_name=data.get('first_name'),
+                points=1000,
+                referral_code=str(uuid.uuid4()),
                 invited_by_id=inviter_id,
+                is_searchable=True,
                 has_completed_genesis=False,
-                is_searchable=True # ИСПРАВЛЕНИЕ: Добавили недостающее поле со значением по умолчанию
-            )
-            await database.execute(insert_query)
+                invites_left=5 # Каждый новый пользователь получает 5 инвайтов
+            ))
             logging.info(f"Зарегистрирован новый пользователь: tg_id={telegram_id}")
 
-            # 3. Если был инвайтер, начисляем ему бонус
-            if inviter_id:
-                bonus_points = 20000 # Бонус за реферала по нашей математике
-                update_query = users.update().where(users.c.id == inviter_id).values(
-                    points=users.c.points + bonus_points
-                )
-                await database.execute(update_query)
-                logging.info(f"Начислено {bonus_points} очков инвайтеру {inviter_id}")
-        
         except Exception as e:
-            logging.error(f"Ошибка БД при регистрации или начислении бонуса: {e}")
-            # Транзакция автоматически откатится, если здесь произойдет ошибка
+            logging.error(f"Ошибка БД при регистрации: {e}")
             return web.json_response({'error': 'Ошибка при записи в БД'}, status=500)
             
     return web.json_response({'status': 'success'}, status=201)
