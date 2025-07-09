@@ -1,5 +1,5 @@
 # server.py
-# ВЕРСИЯ 29: Финальная, полная, исправленная версия
+# ВЕРСИЯ 30: Откат к стабильной, работающей версии
 
 import os
 import logging
@@ -120,24 +120,11 @@ async def register_user(request):
     return web.json_response({'status': 'success'}, status=201)
 
 async def get_genesis_questions(request):
-    logging.info("API: /api/genesis_questions вызван.")
-    if not database or not app.get('database_connected'): return web.json_response({'error': 'DB connection failed'}, status=503)
-
-    try:
-        questions_from_db = await database.fetch_all(questions.select())
-        
-        if not questions_from_db and GENESIS_QUESTIONS:
-            logging.info("Таблица 'questions' пуста. Загружаем вопросы из questions.json...")
-            questions_to_insert = [{"id": q["id"], "text": q["text"], "category": q["category"], "options": q.get("options")} for q in GENESIS_QUESTIONS]
-            await database.execute_many(query=questions.insert(), values=questions_to_insert)
-            logging.info(f"Успешно загружено {len(questions_to_insert)} вопросов в БД.")
-            return web.json_response(GENESIS_QUESTIONS)
-        
-        response_data = [{"id": q["id"], "text": q["text"], "category": q["category"], "options": q["options"]} for q in questions_from_db]
-        return web.json_response(response_data)
-    except Exception as e:
-        logging.error(f"Ошибка при проверке/загрузке вопросов в БД: {e}")
-        return web.json_response({'error': 'Не удалось подготовить вопросы'}, status=500)
+    """ОТКАТ: Возвращаем простую и надежную версию функции."""
+    logging.info("API: /api/genesis_questions вызван (стабильная версия).")
+    if not GENESIS_QUESTIONS:
+        return web.json_response({'error': 'Вопросы не найдены на сервере'}, status=500)
+    return web.json_response(GENESIS_QUESTIONS)
 
 async def submit_answers(request):
     if not database or not app.get('database_connected'): return web.json_response({'error': 'DB connection failed'}, status=503)
