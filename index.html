@@ -1,4 +1,4 @@
-<!-- ВЕРСИЯ 27: Финальная, полная, с восстановленной логикой всех кнопок -->
+<!-- ВЕРСИЯ 29: Финальная, полная, со всеми обработчиками кнопок -->
 <!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -20,12 +20,20 @@
         .header { display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 20px; }
         .header .logo { margin-bottom: 0; }
         .settings-icon { font-size: 24px; cursor: pointer; color: var(--tg-theme-hint-color, #999999); }
-        .invite-section { width: 100%; margin-top: 20px; padding: 20px; background-color: rgba(0,0,0,0.1); border-radius: 12px; }
-        .invite-count { font-size: 20px; font-weight: 600; margin-bottom: 15px; }
-        .invite-count span { font-size: 28px; color: var(--tg-theme-button-color, #007aff); }
+        .settings-row { display: flex; justify-content: space-between; align-items: center; text-align: left; padding: 15px 0; border-bottom: 1px solid #333; }
+        .settings-row label { font-size: 16px; }
+        .toggle { position: relative; display: inline-block; width: 51px; height: 31px; }
+        .toggle input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 34px; }
+        .slider:before { position: absolute; content: ""; height: 23px; width: 23px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background-color: #2196F3; }
+        input:checked + .slider:before { transform: translateX(20px); }
         .options-grid { display: grid; grid-template-columns: 1fr; gap: 10px; margin-bottom: 20px; }
         .option-button { background-color: #333; border: 1px solid #555; color: #fff; }
         .option-button.selected { background-color: var(--tg-theme-button-color, #007aff); border-color: var(--tg-theme-button-color, #007aff); }
+        .invite-section { width: 100%; margin-top: 20px; padding: 20px; background-color: rgba(0,0,0,0.1); border-radius: 12px; }
+        .invite-count { font-size: 20px; font-weight: 600; margin-bottom: 15px; }
+        .invite-count span { font-size: 28px; color: var(--tg-theme-button-color, #007aff); }
     </style>
 </head>
 <body>
@@ -52,8 +60,23 @@
         <button id="next-question-button" class="button" disabled>Далее</button>
     </div>
 
+    <div id="settings-screen" class="container">
+        <div class="header">
+            <div id="back-button" class="settings-icon">←</div>
+            <h1 class="title" style="margin:0;">Настройки</h1>
+            <div></div>
+        </div>
+        <div class="settings-row">
+            <label for="searchable-toggle">Мои данные доступны для поиска</label>
+            <label class="toggle">
+                <input type="checkbox" id="searchable-toggle">
+                <span class="slider"></span>
+            </label>
+        </div>
+        <button id="delete-profile-button" class="button" style="background-color: #ff3b30; margin-top: 40px;">Удалить профиль</button>
+    </div>
+
     <div id="error-screen" class="container"><div class="logo">iTSAR</div><h1 class="title">Доступ Ограничен</h1><p class="text" id="error-text"></p></div>
-    <div id="settings-screen" class="container"></div>
 
     <script>
         const tg = window.Telegram.WebApp;
@@ -67,8 +90,9 @@
 
         const ui = {
             screens: { loading: document.getElementById('loading-screen'), register: document.getElementById('register-screen'), main: document.getElementById('main-screen'), questionnaire: document.getElementById('questionnaire-screen'), error: document.getElementById('error-screen'), settings: document.getElementById('settings-screen') },
-            buttons: { register: document.getElementById('register-button'), startQuestionnaire: document.getElementById('start-questionnaire-button'), nextQuestion: document.getElementById('next-question-button'), copyInviteLink: document.getElementById('copy-invite-link-button'), settings: document.getElementById('settings-button') },
+            buttons: { register: document.getElementById('register-button'), startQuestionnaire: document.getElementById('start-questionnaire-button'), nextQuestion: document.getElementById('next-question-button'), copyInviteLink: document.getElementById('copy-invite-link-button'), settings: document.getElementById('settings-button'), back: document.getElementById('back-button'), deleteProfile: document.getElementById('delete-profile-button') },
             text: { welcomeTitle: document.getElementById('welcome-title'), userInfo: document.getElementById('user-info-text'), error: document.getElementById('error-text'), invitesLeft: document.getElementById('invites-left-count'), progress: document.getElementById('progress-text'), question: document.getElementById('question-text') },
+            toggles: { searchable: document.getElementById('searchable-toggle') }
         };
 
         function showScreen(screenName) {
@@ -81,7 +105,7 @@
             if (!question) return;
             ui.text.question.textContent = question.text;
             ui.text.progress.textContent = `Вопрос ${currentQuestionIndex + 1}/${questions.length}`;
-            ui.containers.options.innerHTML = '';
+            document.getElementById('options-container').innerHTML = '';
             ui.buttons.nextQuestion.disabled = true;
             question.options.forEach(optionText => {
                 const optionButton = document.createElement('button');
@@ -103,10 +127,10 @@
                 const response = await fetch('/api/genesis_questions');
                 if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
                 questions = await response.json();
-                if (questions.length > 0) {
+                if (questions && questions.length > 0) {
                     currentQuestionIndex = 0; userAnswers = {};
                     showScreen('questionnaire');
-                    renderQuestion(); // ВОССТАНОВЛЕНА ЭТА СТРОКА
+                    renderQuestion();
                 } else {
                     tg.showAlert('Вопросов пока нет. Зайдите позже!');
                     showScreen('main');
@@ -129,6 +153,22 @@
                 setTimeout(() => main(), 1000);
             }
         }
+
+        async function updateSettings() {
+            const isSearchable = ui.toggles.searchable.checked;
+            tg.HapticFeedback.impactOccurred('light');
+            await fetch('/api/user/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: currentUserId, is_searchable: isSearchable }) });
+        }
+
+        async function deleteProfile() {
+            tg.showConfirm("Вы уверены?", async (confirmed) => {
+                if (confirmed) {
+                    await fetch('/api/user/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: currentUserId }) });
+                    tg.showAlert("Ваш профиль был удален.");
+                    setTimeout(() => window.location.reload(), 2000);
+                }
+            });
+        }
         
         async function main() {
             showScreen('loading');
@@ -150,9 +190,16 @@
                      currentUserId = currentUserData.user_id;
                      ui.text.welcomeTitle.textContent = `Привет, ${user.first_name || 'Основатель'}!`;
                      ui.text.userInfo.textContent = `Ваш баланс: ${currentUserData.points} Очков.`;
+                     ui.toggles.searchable.checked = currentUserData.is_searchable;
                      ui.text.invitesLeft.textContent = currentUserData.invites_left;
                      if (currentUserData.invites_left <= 0) { ui.buttons.copyInviteLink.disabled = true; ui.buttons.copyInviteLink.textContent = 'Инвайты закончились'; }
-                     if (currentUserData.has_completed_genesis) { ui.buttons.startQuestionnaire.textContent = 'Генезис-Профиль пройден ✓'; ui.buttons.startQuestionnaire.disabled = true; }
+                     if (currentUserData.has_completed_genesis) {
+                        ui.buttons.startQuestionnaire.textContent = 'Генезис-Профиль пройден ✓';
+                        ui.buttons.startQuestionnaire.disabled = true;
+                     } else {
+                        ui.buttons.startQuestionnaire.textContent = 'Пройти Генезис-Профиль';
+                        ui.buttons.startQuestionnaire.disabled = false;
+                     }
                      showScreen('main');
                 } else if (response.status === 404) {
                     const inviterCode = localStorage.getItem('inviter_code') || tg.initDataUnsafe.start_param;
@@ -175,6 +222,10 @@
         }
 
         // --- Привязка обработчиков событий ---
+        ui.buttons.settings.addEventListener('click', () => showScreen('settings'));
+        ui.buttons.back.addEventListener('click', () => showScreen('main'));
+        ui.toggles.searchable.addEventListener('change', updateSettings);
+        ui.buttons.deleteProfile.addEventListener('click', deleteProfile);
         ui.buttons.startQuestionnaire.addEventListener('click', startQuestionnaire);
         ui.buttons.nextQuestion.addEventListener('click', nextQuestion);
         
@@ -212,7 +263,7 @@
                 tg.HapticFeedback.notificationOccurred('success');
                 tg.showAlert('Ссылка-приглашение скопирована!');
             }).catch(() => {
-                tg.showAlert('Не удалось скопировать ссылку. Пожалуйста, сделайте это вручную.');
+                tg.showAlert('Не удалось скопировать ссылку.');
             });
         });
         
