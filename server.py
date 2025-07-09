@@ -1,5 +1,5 @@
 # server.py
-# ВЕРСИЯ 21: Финальная, полная версия с исправленным начислением очков и рефералов
+# ВЕРСИЯ 22: Финальная, полная версия с добавленной функцией get_user_count
 
 import os
 import logging
@@ -43,6 +43,7 @@ users = sqlalchemy.Table(
     sqlalchemy.Column("invited_by_id", UUID(as_uuid=True), sqlalchemy.ForeignKey("users.id"), nullable=True),
     sqlalchemy.Column("has_completed_genesis", sqlalchemy.Boolean, default=False, nullable=False),
     sqlalchemy.Column("is_searchable", sqlalchemy.Boolean, default=True, nullable=False),
+    sqlalchemy.Column("invites_left", sqlalchemy.Integer, default=5, nullable=False),
     sqlalchemy.Column("created_at", sqlalchemy.DateTime, server_default=sqlalchemy.func.now()),
 )
 
@@ -196,6 +197,20 @@ async def delete_user(request):
         logging.error(f"Ошибка при удалении пользователя: {e}")
         return web.json_response({'error': 'Ошибка на сервере'}, status=500)
 
+# ВОТ НЕДОСТАЮЩАЯ ФУНКЦИЯ:
+async def get_user_count(request):
+    """Возвращает общее количество зарегистрированных пользователей."""
+    if not database or not app.get('database_connected'):
+        return web.json_response({'error': 'DB connection failed'}, status=503)
+    try:
+        query = sqlalchemy.select(sqlalchemy.func.count(users.c.id))
+        count = await database.fetch_val(query)
+        return web.json_response({'count': count})
+    except Exception as e:
+        logging.error(f"Ошибка при подсчете пользователей: {e}")
+        return web.json_response({'error': 'Ошибка на сервере'}, status=500)
+
+
 async def handle_index(request):
     try:
         with open('./index.html', 'r', encoding='utf-8') as f: return web.Response(text=f.read(), content_type='text/html')
@@ -229,6 +244,9 @@ app.router.add_post('/api/submit_answers', submit_answers)
 app.router.add_post('/api/user/settings', update_user_settings)
 app.router.add_post('/api/user/delete', delete_user)
 app.router.add_get('/api/user_count', get_user_count)
+
+app.on_startup.append(on_startup)
+app.on_shutdown.append(on_shutdown)
 
 if __name__ == "__main__":
     web.run_app(app, port=PORT, host='0.0.0.0')
