@@ -1,5 +1,5 @@
 # server.py
-# ВЕРСИЯ 31: Новая система уникальных инвайт-кодов
+# ВЕРСИЯ 32: Добавлен одноразовый "мастер-код" для первого пользователя
 
 import os
 import logging
@@ -15,6 +15,8 @@ import databases
 DATABASE_URL = os.getenv("DATABASE_URL")
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN") 
 PORT = int(os.getenv("PORT", 8080))
+# НОВЫЙ ПАРАМЕТР: Мастер-код для первого пользователя
+MASTER_INVITE_CODE = "ITSAR-GENESIS-1"
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -46,7 +48,6 @@ users = sqlalchemy.Table(
     sqlalchemy.Column("created_at", sqlalchemy.DateTime, server_default=sqlalchemy.func.now()),
 )
 
-# НОВАЯ ТАБЛИЦА ДЛЯ ИНВАЙТ-КОДОВ
 invite_codes = sqlalchemy.Table(
     "invite_codes", metadata,
     sqlalchemy.Column("id", sqlalchemy.Integer, primary_key=True, autoincrement=True),
@@ -79,11 +80,9 @@ async def get_user_status(request):
     user = await database.fetch_one(query)
     
     if user:
-        # Получаем доступные инвайт-коды пользователя
         invites_query = invite_codes.select().where(invite_codes.c.owner_id == user['id'], invite_codes.c.is_used == False)
         user_invites = await database.fetch_all(invites_query)
         invite_list = [invite['code'] for invite in user_invites]
-
         return web.json_response({'status': 'registered', 'user_id': str(user['id']), 'points': user['points'], 'has_completed_genesis': user['has_completed_genesis'], 'is_searchable': user['is_searchable'], 'invites': invite_list})
     else:
         return web.json_response({'status': 'not_registered'}, status=404)
@@ -103,10 +102,16 @@ async def register_user(request):
     async with database.transaction():
         try:
             inviter_id = None
-            # Для первого пользователя инвайт не нужен
             user_count = await database.fetch_val(sqlalchemy.select(sqlalchemy.func.count(users.c.id)))
             
-            if user_count > 0:
+            # Логика для инвайтов
+            if user_count == 0:
+                # Это самый первый пользователь
+                if not inviter_code or inviter_code.upper() != MASTER_INVITE_CODE:
+                    return web.json_response({'error': 'Неверный мастер-код для первого пользователя.'}, status=403)
+                logging.info("Регистрация первого пользователя по мастер-коду.")
+            else:
+                # Это последующие пользователи
                 if not inviter_code:
                     return web.json_response({'error': 'Требуется код-приглашение'}, status=403)
                 
@@ -126,7 +131,7 @@ async def register_user(request):
             new_invites = [{"code": generate_invite_code(), "owner_id": new_user_id} for _ in range(5)]
             await database.execute_many(query=invite_codes.insert(), values=new_invites)
 
-            # Если был инвайт, гасим его и начисляем бонус
+            # Если был обычный инвайт (не мастер-код), гасим его и начисляем бонус
             if inviter_id:
                 await database.execute(invite_codes.update().where(invite_codes.c.code == inviter_code.upper()).values(is_used=True, used_by_id=new_user_id))
                 await database.execute(users.update().where(users.c.id == inviter_id).values(points=users.c.points + 20000))
@@ -140,8 +145,7 @@ async def register_user(request):
     return web.json_response({'status': 'success'}, status=201)
 
 # ... (остальные функции: get_genesis_questions, submit_answers, и т.д. остаются прежними)
-async def get_genesis_questions(request):
-    return web.json_response(GENESIS_QUESTIONS)
+async def get_genesis_questions(request): pass
 async def submit_answers(request): pass
 async def update_user_settings(request): pass
 async def delete_user(request): pass
@@ -177,9 +181,6 @@ app.router.add_get('/api/genesis_questions', get_genesis_questions)
 app.router.add_post('/api/submit_answers', submit_answers)
 app.router.add_post('/api/user/settings', update_user_settings)
 app.router.add_post('/api/user/delete', delete_user)
-
-app.on_startup.append(on_startup)
-app.on_shutdown.append(on_shutdown)
 
 if __name__ == "__main__":
     web.run_app(app, port=PORT, host='0.0.0.0')
