@@ -1,5 +1,5 @@
 # server.py
-# ВЕРСИЯ 28: Финальная, полная версия с исправленной сериализацией JSON
+# ВЕРСИЯ 29: Финальная, полная, исправленная версия
 
 import os
 import logging
@@ -120,21 +120,24 @@ async def register_user(request):
     return web.json_response({'status': 'success'}, status=201)
 
 async def get_genesis_questions(request):
-    """Отдает стартовый набор вопросов, загружая их из файла."""
     logging.info("API: /api/genesis_questions вызван.")
-    
-    if not GENESIS_QUESTIONS:
-        logging.error("Вопросы не были загружены из файла questions.json при старте сервера.")
-        return web.json_response({'error': 'Вопросы не найдены на сервере'}, status=500)
-    
+    if not database or not app.get('database_connected'): return web.json_response({'error': 'DB connection failed'}, status=503)
+
     try:
-        # ИСПРАВЛЕНИЕ: Вручную сериализуем данные в JSON-строку
-        # и возвращаем как текст с правильным Content-Type.
-        response_text = json.dumps(GENESIS_QUESTIONS, ensure_ascii=False)
-        return web.Response(text=response_text, content_type='application/json')
+        questions_from_db = await database.fetch_all(questions.select())
+        
+        if not questions_from_db and GENESIS_QUESTIONS:
+            logging.info("Таблица 'questions' пуста. Загружаем вопросы из questions.json...")
+            questions_to_insert = [{"id": q["id"], "text": q["text"], "category": q["category"], "options": q.get("options")} for q in GENESIS_QUESTIONS]
+            await database.execute_many(query=questions.insert(), values=questions_to_insert)
+            logging.info(f"Успешно загружено {len(questions_to_insert)} вопросов в БД.")
+            return web.json_response(GENESIS_QUESTIONS)
+        
+        response_data = [{"id": q["id"], "text": q["text"], "category": q["category"], "options": q["options"]} for q in questions_from_db]
+        return web.json_response(response_data)
     except Exception as e:
-        logging.error(f"Ошибка при сериализации вопросов в JSON: {e}")
-        return web.json_response({'error': 'Не удалось подготовить данные'}, status=500)
+        logging.error(f"Ошибка при проверке/загрузке вопросов в БД: {e}")
+        return web.json_response({'error': 'Не удалось подготовить вопросы'}, status=500)
 
 async def submit_answers(request):
     if not database or not app.get('database_connected'): return web.json_response({'error': 'DB connection failed'}, status=503)
