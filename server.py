@@ -1,5 +1,5 @@
 # server.py
-# ВЕРСИЯ 25: Финальная, полная, исправленная версия
+# ВЕРСИЯ 22: Финальная, полная версия с добавленной функцией get_user_count
 
 import os
 import logging
@@ -86,9 +86,7 @@ async def get_user_status(request):
         return web.json_response({'status': 'not_registered'}, status=404)
 
 async def register_user(request):
-    logging.info("API: /api/register вызван.")
     if not database or not app.get('database_connected'): return web.json_response({'error': 'DB connection failed'}, status=503)
-
     try:
         data = await request.json()
         telegram_id, inviter_code = data['telegram_id'], data.get('inviter_code')
@@ -103,14 +101,11 @@ async def register_user(request):
             user_count = await database.fetch_val(sqlalchemy.select(sqlalchemy.func.count(users.c.id)))
             
             if user_count > 0:
-                if not inviter_code:
-                    return web.json_response({'error': 'Для вступления требуется приглашение.'}, status=403)
+                if not inviter_code: return web.json_response({'error': 'Для вступления требуется приглашение.'}, status=403)
                 
                 inviter = await database.fetch_one(users.select().where(users.c.referral_code == inviter_code))
-                if not inviter:
-                    return web.json_response({'error': 'Код-приглашение недействителен или устарел.'}, status=403)
-                if inviter['invites_left'] <= 0:
-                    return web.json_response({'error': 'У пригласившего закончились инвайты.'}, status=403)
+                if not inviter: return web.json_response({'error': 'Код-приглашение недействителен или устарел.'}, status=403)
+                if inviter['invites_left'] <= 0: return web.json_response({'error': 'У пригласившего закончились инвайты.'}, status=403)
                 
                 inviter_id = inviter['id']
                 await database.execute(users.update().where(users.c.id == inviter_id).values(invites_left=users.c.invites_left - 1))
@@ -125,9 +120,7 @@ async def register_user(request):
     return web.json_response({'status': 'success'}, status=201)
 
 async def get_genesis_questions(request):
-    logging.info("API: /api/genesis_questions вызван.")
     if not database or not app.get('database_connected'): return web.json_response({'error': 'DB connection failed'}, status=503)
-
     try:
         count_query = sqlalchemy.select(sqlalchemy.func.count(questions.c.id))
         count = await database.fetch_val(count_query)
