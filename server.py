@@ -1,5 +1,5 @@
 # server.py
-# ВЕРСИЯ 22: Финальная, полная версия с добавленной функцией get_user_count
+# ВЕРСИЯ 26: Финальная, полная, исправленная версия
 
 import os
 import logging
@@ -86,7 +86,9 @@ async def get_user_status(request):
         return web.json_response({'status': 'not_registered'}, status=404)
 
 async def register_user(request):
+    logging.info("API: /api/register вызван.")
     if not database or not app.get('database_connected'): return web.json_response({'error': 'DB connection failed'}, status=503)
+
     try:
         data = await request.json()
         telegram_id, inviter_code = data['telegram_id'], data.get('inviter_code')
@@ -101,11 +103,14 @@ async def register_user(request):
             user_count = await database.fetch_val(sqlalchemy.select(sqlalchemy.func.count(users.c.id)))
             
             if user_count > 0:
-                if not inviter_code: return web.json_response({'error': 'Для вступления требуется приглашение.'}, status=403)
+                if not inviter_code:
+                    return web.json_response({'error': 'Для вступления требуется приглашение.'}, status=403)
                 
                 inviter = await database.fetch_one(users.select().where(users.c.referral_code == inviter_code))
-                if not inviter: return web.json_response({'error': 'Код-приглашение недействителен или устарел.'}, status=403)
-                if inviter['invites_left'] <= 0: return web.json_response({'error': 'У пригласившего закончились инвайты.'}, status=403)
+                if not inviter:
+                    return web.json_response({'error': 'Код-приглашение недействителен или устарел.'}, status=403)
+                if inviter['invites_left'] <= 0:
+                    return web.json_response({'error': 'У пригласившего закончились инвайты.'}, status=403)
                 
                 inviter_id = inviter['id']
                 await database.execute(users.update().where(users.c.id == inviter_id).values(invites_left=users.c.invites_left - 1))
@@ -122,17 +127,19 @@ async def register_user(request):
 async def get_genesis_questions(request):
     if not database or not app.get('database_connected'): return web.json_response({'error': 'DB connection failed'}, status=503)
     try:
-        count_query = sqlalchemy.select(sqlalchemy.func.count(questions.c.id))
-        count = await database.fetch_val(count_query)
-        if count == 0 and GENESIS_QUESTIONS:
+        questions_from_db = await database.fetch_all(questions.select())
+        if not questions_from_db and GENESIS_QUESTIONS:
             logging.info("Таблица 'questions' пуста. Загружаем вопросы...")
-            questions_to_insert = [{"id": q["id"], "text": q["text"], "category": q["category"], "options": json.dumps(q.get("options"))} for q in GENESIS_QUESTIONS]
+            questions_to_insert = [{"id": q["id"], "text": q["text"], "category": q["category"], "options": q.get("options")} for q in GENESIS_QUESTIONS]
             await database.execute_many(query=questions.insert(), values=questions_to_insert)
             logging.info(f"Успешно загружено {len(questions_to_insert)} вопросов в БД.")
+            return web.json_response(GENESIS_QUESTIONS)
+        
+        response_data = [{"id": q["id"], "text": q["text"], "category": q["category"], "options": q["options"]} for q in questions_from_db]
+        return web.json_response(response_data)
     except Exception as e:
         logging.error(f"Ошибка при проверке/загрузке вопросов в БД: {e}")
         return web.json_response({'error': 'Не удалось подготовить вопросы'}, status=500)
-    return web.json_response(GENESIS_QUESTIONS)
 
 async def submit_answers(request):
     if not database or not app.get('database_connected'): return web.json_response({'error': 'DB connection failed'}, status=503)
