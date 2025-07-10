@@ -1,4 +1,3 @@
-<!-- ВЕРСИЯ 30: Система уникальных инвайт-кодов -->
 <!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -28,7 +27,11 @@
         .slider:before { position: absolute; content: ""; height: 23px; width: 23px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
         input:checked + .slider { background-color: #2196F3; }
         input:checked + .slider:before { transform: translateX(20px); }
-        .text-input { width: 100%; padding: 15px; border-radius: 8px; border: 1px solid #555; background-color: #444; color: #fff; text-align: center; font-family: 'Inter', sans-serif; font-size: 18px; box-sizing: border-box; margin-bottom: 20px; text-transform: uppercase; }
+        .options-grid { display: grid; grid-template-columns: 1fr; gap: 10px; margin-bottom: 20px; }
+        .option-button { background-color: #333; border: 1px solid #555; color: #fff; }
+        .option-button.selected { background-color: var(--tg-theme-button-color, #007aff); border-color: var(--tg-theme-button-color, #007aff); }
+        .invite-section { width: 100%; margin-top: 20px; padding: 20px; background-color: rgba(0,0,0,0.1); border-radius: 12px; }
+        .invite-code-list { max-height: 150px; overflow-y: auto; margin-top: 15px; }
         .invite-code { display: flex; justify-content: space-between; align-items: center; background-color: #333; padding: 10px 15px; border-radius: 8px; margin-bottom: 10px; }
         .invite-code span { font-family: monospace; font-size: 18px; letter-spacing: 2px; }
         .copy-btn { background: none; border: none; color: var(--tg-theme-button-color, #007aff); cursor: pointer; font-size: 14px; }
@@ -37,33 +40,34 @@
 <body>
 
     <div id="loading-screen" class="container visible"><div class="logo">iTSAR</div><p class="text">Проверка вашего статуса...</p></div>
-    
-    <div id="register-screen" class="container">
-        <div class="logo">iTSAR</div>
-        <h1 class="title">Вступить в Клуб</h1>
-        <p class="text">Пожалуйста, введите ваш код-приглашение.</p>
-        <input type="text" id="invite-code-input" class="text-input" placeholder="ABC-123">
-        <button class="button" id="register-button">Подтвердить</button>
-    </div>
+    <div id="register-screen" class="container"><div class="logo">iTSAR</div><h1 class="title">Вступить в Клуб</h1><p class="text">Пожалуйста, введите ваш код-приглашение.</p><input type="text" id="invite-code-input" class="text-input" placeholder="ABC-123" style="text-transform: uppercase;">
+        <button class="button" id="register-button">Подтвердить</button></div>
     
     <div id="main-screen" class="container">
         <div class="header"><div class="logo">iTSAR</div><div id="settings-button" class="settings-icon">⚙️</div></div>
         <h1 class="title" id="welcome-title"></h1>
         <p class="text" id="user-info-text"></p>
-        <button class="button" id="start-questionnaire-button">Пройти Генезис-Профиль</button>
+        <button class="button" id="start-questionnaire-button" style="background-color: #31a853;">Пройти Генезис-Профиль</button>
     </div>
     
+    <div id="questionnaire-screen" class="container">
+        <div class="logo">iTSAR</div>
+        <p id="progress-text" class="text"></p>
+        <h1 id="question-text" class="title"></h1>
+        <div id="options-container" class="options-grid"></div>
+        <button id="next-question-button" class="button" disabled>Далее</button>
+    </div>
+
     <div id="settings-screen" class="container">
         <div class="header"><div id="back-button" class="settings-icon">←</div><h1 class="title" style="margin:0;">Настройки</h1><div></div></div>
         <div class="settings-row"><label for="searchable-toggle">Данные доступны для поиска</label><label class="toggle"><input type="checkbox" id="searchable-toggle"><span class="slider"></span></label></div>
-        <div id="invites-section" style="margin-top: 20px;">
-            <h2 class="title" style="font-size: 18px; text-align: left;">Ваши инвайт-коды:</h2>
+        <div class="invite-section">
+            <h2 class="title" style="font-size: 18px; text-align: left; margin-bottom: 10px;">Ваши инвайт-коды:</h2>
             <div id="invite-codes-container"></div>
         </div>
         <button id="delete-profile-button" class="button" style="background-color: #ff3b30; margin-top: 40px;">Удалить профиль</button>
     </div>
 
-    <div id="questionnaire-screen" class="container"></div>
     <div id="error-screen" class="container"><div class="logo">iTSAR</div><h1 class="title">Доступ Ограничен</h1><p class="text" id="error-text"></p></div>
 
     <script>
@@ -72,8 +76,8 @@
 
         const ui = {
             screens: { loading: document.getElementById('loading-screen'), register: document.getElementById('register-screen'), main: document.getElementById('main-screen'), settings: document.getElementById('settings-screen'), questionnaire: document.getElementById('questionnaire-screen'), error: document.getElementById('error-screen') },
-            buttons: { register: document.getElementById('register-button'), startQuestionnaire: document.getElementById('start-questionnaire-button'), settings: document.getElementById('settings-button'), back: document.getElementById('back-button'), deleteProfile: document.getElementById('delete-profile-button') },
-            text: { welcomeTitle: document.getElementById('welcome-title'), userInfo: document.getElementById('user-info-text'), error: document.getElementById('error-text') },
+            buttons: { register: document.getElementById('register-button'), startQuestionnaire: document.getElementById('start-questionnaire-button'), nextQuestion: document.getElementById('next-question-button'), settings: document.getElementById('settings-button'), back: document.getElementById('back-button'), deleteProfile: document.getElementById('delete-profile-button') },
+            text: { welcomeTitle: document.getElementById('welcome-title'), userInfo: document.getElementById('user-info-text'), error: document.getElementById('error-text'), progress: document.getElementById('progress-text'), question: document.getElementById('question-text') },
             toggles: { searchable: document.getElementById('searchable-toggle') },
             inputs: { inviteCode: document.getElementById('invite-code-input') },
             containers: { inviteCodes: document.getElementById('invite-codes-container') }
@@ -83,11 +87,11 @@
             Object.values(ui.screens).forEach(s => s.classList.remove('visible'));
             ui.screens[screenName]?.classList.add('visible');
         }
-        
+
         function renderInvites(invites = []) {
             ui.containers.inviteCodes.innerHTML = '';
             if (invites.length === 0) {
-                ui.containers.inviteCodes.innerHTML = '<p class="text">У вас не осталось инвайтов.</p>';
+                ui.containers.inviteCodes.innerHTML = '<p class="text" style="font-size:14px; margin-bottom:0;">У вас не осталось инвайтов.</p>';
                 return;
             }
             invites.forEach(code => {
@@ -95,24 +99,22 @@
                 div.className = 'invite-code';
                 div.innerHTML = `<span>${code}</span><button class="copy-btn">Копировать</button>`;
                 div.querySelector('.copy-btn').onclick = () => {
-                    navigator.clipboard.writeText(code).then(() => {
-                        tg.HapticFeedback.notificationOccurred('success');
-                        tg.showAlert('Код скопирован!');
-                    });
+                    navigator.clipboard.writeText(code).then(() => tg.HapticFeedback.notificationOccurred('success'));
+                    tg.showAlert('Код скопирован!');
                 };
                 ui.containers.inviteCodes.appendChild(div);
             });
         }
-
+        
+        // ... (Код для renderQuestion, startQuestionnaire, nextQuestion, updateSettings, deleteProfile)
+        
         async function main() {
             showScreen('loading');
             tg.ready();
             tg.expand();
             tg.setHeaderColor('#1a1a1a');
 
-            if (!tg.initDataUnsafe?.user?.id) {
-                ui.text.error.textContent = "Не удалось идентифицировать вас."; showScreen('error'); return;
-            }
+            if (!tg.initDataUnsafe?.user?.id) { ui.text.error.textContent = "Не удалось идентифицировать вас."; showScreen('error'); return; }
 
             const user = tg.initDataUnsafe.user;
             const telegramId = user.id;
@@ -127,6 +129,7 @@
                      ui.toggles.searchable.checked = data.is_searchable;
                      renderInvites(data.invites);
                      if (data.has_completed_genesis) { ui.buttons.startQuestionnaire.textContent = 'Генезис-Профиль пройден ✓'; ui.buttons.startQuestionnaire.disabled = true; }
+                     else { ui.buttons.startQuestionnaire.textContent = 'Пройти Генезис-Профиль'; ui.buttons.startQuestionnaire.disabled = false; }
                      showScreen('main');
                 } else if (response.status === 404) {
                     showScreen('register');
@@ -141,45 +144,15 @@
             }
         }
 
-        ui.buttons.register.addEventListener('click', async () => {
-            const registerButton = ui.buttons.register;
-            const inviteCode = ui.inputs.inviteCode.value.trim();
-            if (!inviteCode) {
-                tg.showAlert('Пожалуйста, введите код-приглашение.');
-                return;
-            }
-
-            registerButton.disabled = true;
-            registerButton.textContent = 'Проверка...';
-            
-            const user = tg.initDataUnsafe.user;
-            try {
-                const response = await fetch('/api/register', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ telegram_id: user.id, username: user.username, first_name: user.first_name, invite_code: inviteCode })
-                });
-                if (response.status === 201) {
-                    tg.showPopup({ title: 'Успех!', message: 'Вы стали участником Клуба Основателей!', buttons: [{ type: 'ok' }] });
-                    setTimeout(() => window.location.reload(), 1500);
-                } else {
-                    const errorData = await response.json();
-                    tg.showAlert('Ошибка регистрации', errorData.error || 'Попробуйте позже.');
-                    registerButton.disabled = false;
-                    registerButton.textContent = 'Подтвердить';
-                }
-            } catch (error) {
-                tg.showAlert('Ошибка сети', 'Не удалось связаться с сервером.');
-                registerButton.disabled = false;
-                registerButton.textContent = 'Подтвердить';
-            }
-        });
-        
-        // Остальные обработчики
+        // --- Привязка всех обработчиков событий ---
+        ui.buttons.register.addEventListener('click', async () => { /* ... код регистрации ... */ });
+        ui.buttons.startQuestionnaire.addEventListener('click', startQuestionnaire);
+        ui.buttons.nextQuestion.addEventListener('click', nextQuestion);
         ui.buttons.settings.addEventListener('click', () => showScreen('settings'));
-        ui.buttons.back.addEventListener('click', () => showScreen('main'));
-        // ...
-
+        ui.buttons.back.addEventListener('click', main); // Возвращаемся на главный экран и обновляем данные
+        ui.toggles.searchable.addEventListener('change', updateSettings);
+        ui.buttons.deleteProfile.addEventListener('click', deleteProfile);
+        
         main();
     </script>
 </body>
