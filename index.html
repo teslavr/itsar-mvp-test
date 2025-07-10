@@ -1,3 +1,4 @@
+<!-- ВЕРСИЯ 39: Финальная, полная, со всеми элементами и обработчиками -->
 <!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -35,13 +36,13 @@
         .invite-code { display: flex; justify-content: space-between; align-items: center; background-color: #333; padding: 10px 15px; border-radius: 8px; margin-bottom: 10px; }
         .invite-code span { font-family: monospace; font-size: 18px; letter-spacing: 2px; }
         .copy-btn { background: none; border: none; color: var(--tg-theme-button-color, #007aff); cursor: pointer; font-size: 14px; }
+        .text-input { width: 100%; padding: 15px; border-radius: 8px; border: 1px solid #555; background-color: #444; color: #fff; text-align: center; font-family: 'Inter', sans-serif; font-size: 18px; box-sizing: border-box; margin-bottom: 20px; text-transform: uppercase; }
     </style>
 </head>
 <body>
 
     <div id="loading-screen" class="container visible"><div class="logo">iTSAR</div><p class="text">Проверка вашего статуса...</p></div>
-    <div id="register-screen" class="container"><div class="logo">iTSAR</div><h1 class="title">Вступить в Клуб</h1><p class="text">Пожалуйста, введите ваш код-приглашение.</p><input type="text" id="invite-code-input" class="text-input" placeholder="ABC-123" style="text-transform: uppercase;">
-        <button class="button" id="register-button">Подтвердить</button></div>
+    <div id="register-screen" class="container"><div class="logo">iTSAR</div><h1 class="title">Вступить в Клуб</h1><p class="text">Пожалуйста, введите ваш код-приглашение.</p><input type="text" id="invite-code-input" class="text-input" placeholder="КОД"><button class="button" id="register-button">Подтвердить</button></div>
     
     <div id="main-screen" class="container">
         <div class="header"><div class="logo">iTSAR</div><div id="settings-button" class="settings-icon">⚙️</div></div>
@@ -63,7 +64,7 @@
         <div class="settings-row"><label for="searchable-toggle">Данные доступны для поиска</label><label class="toggle"><input type="checkbox" id="searchable-toggle"><span class="slider"></span></label></div>
         <div class="invite-section">
             <h2 class="title" style="font-size: 18px; text-align: left; margin-bottom: 10px;">Ваши инвайт-коды:</h2>
-            <div id="invite-codes-container"></div>
+            <div id="invite-codes-container" class="invite-code-list"></div>
         </div>
         <button id="delete-profile-button" class="button" style="background-color: #ff3b30; margin-top: 40px;">Удалить профиль</button>
     </div>
@@ -73,6 +74,10 @@
     <script>
         const tg = window.Telegram.WebApp;
         let currentUserId = null;
+        let currentUserData = {};
+        let questions = [];
+        let currentQuestionIndex = 0;
+        let userAnswers = {};
 
         const ui = {
             screens: { loading: document.getElementById('loading-screen'), register: document.getElementById('register-screen'), main: document.getElementById('main-screen'), settings: document.getElementById('settings-screen'), questionnaire: document.getElementById('questionnaire-screen'), error: document.getElementById('error-screen') },
@@ -80,7 +85,7 @@
             text: { welcomeTitle: document.getElementById('welcome-title'), userInfo: document.getElementById('user-info-text'), error: document.getElementById('error-text'), progress: document.getElementById('progress-text'), question: document.getElementById('question-text') },
             toggles: { searchable: document.getElementById('searchable-toggle') },
             inputs: { inviteCode: document.getElementById('invite-code-input') },
-            containers: { inviteCodes: document.getElementById('invite-codes-container') }
+            containers: { inviteCodes: document.getElementById('invite-codes-container'), options: document.getElementById('options-container') }
         };
 
         function showScreen(screenName) {
@@ -106,7 +111,75 @@
             });
         }
         
-        // ... (Код для renderQuestion, startQuestionnaire, nextQuestion, updateSettings, deleteProfile)
+        function renderQuestion() {
+            const question = questions[currentQuestionIndex];
+            if (!question) return;
+            ui.text.question.textContent = question.text;
+            ui.text.progress.textContent = `Вопрос ${currentQuestionIndex + 1}/${questions.length}`;
+            ui.containers.options.innerHTML = '';
+            ui.buttons.nextQuestion.disabled = true;
+            question.options.forEach(optionText => {
+                const optionButton = document.createElement('button');
+                optionButton.textContent = optionText;
+                optionButton.className = 'button option-button';
+                optionButton.onclick = () => {
+                    document.querySelectorAll('.option-button.selected').forEach(btn => btn.classList.remove('selected'));
+                    optionButton.classList.add('selected');
+                    userAnswers[question.id] = optionText;
+                    ui.buttons.nextQuestion.disabled = false;
+                };
+                ui.containers.options.appendChild(optionButton);
+            });
+        }
+
+        async function startQuestionnaire() {
+            try {
+                showScreen('loading');
+                const response = await fetch('/api/genesis_questions');
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                questions = await response.json();
+                if (questions && questions.length > 0) {
+                    currentQuestionIndex = 0; userAnswers = {};
+                    showScreen('questionnaire');
+                    renderQuestion();
+                } else {
+                    tg.showAlert('Вопросов пока нет. Зайдите позже!');
+                    showScreen('main');
+                }
+            } catch (e) {
+                tg.showAlert('Не удалось загрузить вопросы.', e.message);
+                showScreen('main');
+            }
+        }
+
+        async function nextQuestion() {
+            currentQuestionIndex++;
+            if (currentQuestionIndex < questions.length) {
+                renderQuestion();
+            } else {
+                showScreen('loading');
+                ui.screens.loading.querySelector('.text').textContent = 'Отправка ответов...';
+                await fetch('/api/submit_answers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: currentUserId, answers: userAnswers }) });
+                tg.showPopup({ title: 'Спасибо!', message: 'Ваши ответы сохранены. Мы начислили вам бонусные очки!', buttons: [{type: 'ok'}] });
+                setTimeout(() => main(), 1000);
+            }
+        }
+
+        async function updateSettings() {
+            const isSearchable = ui.toggles.searchable.checked;
+            tg.HapticFeedback.impactOccurred('light');
+            await fetch('/api/user/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: currentUserId, is_searchable: isSearchable }) });
+        }
+
+        async function deleteProfile() {
+            tg.showConfirm("Вы уверены?", async (confirmed) => {
+                if (confirmed) {
+                    await fetch('/api/user/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: currentUserId }) });
+                    tg.showAlert("Ваш профиль был удален.");
+                    setTimeout(() => window.location.reload(), 2000);
+                }
+            });
+        }
         
         async function main() {
             showScreen('loading');
@@ -122,14 +195,19 @@
             try {
                 const response = await fetch(`/api/user/status?telegram_id=${telegramId}`);
                 if (response.status === 200) {
-                     const data = await response.json();
-                     currentUserId = data.user_id;
+                     currentUserData = await response.json();
+                     currentUserId = currentUserData.user_id;
                      ui.text.welcomeTitle.textContent = `Привет, ${user.first_name || 'Основатель'}!`;
-                     ui.text.userInfo.textContent = `Ваш баланс: ${data.points} Очков.`;
-                     ui.toggles.searchable.checked = data.is_searchable;
-                     renderInvites(data.invites);
-                     if (data.has_completed_genesis) { ui.buttons.startQuestionnaire.textContent = 'Генезис-Профиль пройден ✓'; ui.buttons.startQuestionnaire.disabled = true; }
-                     else { ui.buttons.startQuestionnaire.textContent = 'Пройти Генезис-Профиль'; ui.buttons.startQuestionnaire.disabled = false; }
+                     ui.text.userInfo.textContent = `Ваш баланс: ${currentUserData.points} Очков.`;
+                     ui.toggles.searchable.checked = currentUserData.is_searchable;
+                     renderInvites(currentUserData.invites);
+                     if (currentUserData.has_completed_genesis) {
+                        ui.buttons.startQuestionnaire.textContent = 'Генезис-Профиль пройден ✓';
+                        ui.buttons.startQuestionnaire.disabled = true;
+                     } else {
+                        ui.buttons.startQuestionnaire.textContent = 'Пройти Генезис-Профиль';
+                        ui.buttons.startQuestionnaire.disabled = false;
+                     }
                      showScreen('main');
                 } else if (response.status === 404) {
                     showScreen('register');
@@ -145,11 +223,38 @@
         }
 
         // --- Привязка всех обработчиков событий ---
-        ui.buttons.register.addEventListener('click', async () => { /* ... код регистрации ... */ });
+        ui.buttons.register.addEventListener('click', async () => {
+            const registerButton = ui.buttons.register;
+            const inviteCode = ui.inputs.inviteCode.value.trim();
+            if (!inviteCode) { tg.showAlert('Пожалуйста, введите код-приглашение.'); return; }
+            registerButton.disabled = true;
+            registerButton.textContent = 'Проверка...';
+            const user = tg.initDataUnsafe.user;
+            try {
+                const response = await fetch('/api/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ telegram_id: user.id, username: user.username, first_name: user.first_name, invite_code: inviteCode })
+                });
+                const data = await response.json();
+                if (response.status === 201) {
+                    tg.showPopup({ title: 'Успех!', message: 'Вы стали участником Клуба Основателей!', buttons: [{ type: 'ok' }] });
+                    setTimeout(() => window.location.reload(), 1500);
+                } else {
+                    tg.showAlert('Ошибка регистрации', data.error || 'Попробуйте позже.');
+                    registerButton.disabled = false;
+                    registerButton.textContent = 'Подтвердить';
+                }
+            } catch (error) {
+                tg.showAlert('Ошибка сети', 'Не удалось связаться с сервером.');
+                registerButton.disabled = false;
+                registerButton.textContent = 'Подтвердить';
+            }
+        });
         ui.buttons.startQuestionnaire.addEventListener('click', startQuestionnaire);
         ui.buttons.nextQuestion.addEventListener('click', nextQuestion);
         ui.buttons.settings.addEventListener('click', () => showScreen('settings'));
-        ui.buttons.back.addEventListener('click', main); // Возвращаемся на главный экран и обновляем данные
+        ui.buttons.back.addEventListener('click', main);
         ui.toggles.searchable.addEventListener('change', updateSettings);
         ui.buttons.deleteProfile.addEventListener('click', deleteProfile);
         
