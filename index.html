@@ -1,4 +1,4 @@
-<!-- ВЕРСИЯ 54: Финальный дизайн с выровненным размером шрифта -->
+<!-- ВЕРСИЯ 55: Финальная, полная, со всей рабочей логикой и новым дизайном -->
 <!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -61,7 +61,6 @@
                 <button id="settings-button" class="text-gray-500 hover:text-white transition-colors"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></button>
             </div>
             <div class="bg-gray-800 p-6 rounded-2xl shadow-lg w-full">
-                <!-- ИСПРАВЛЕНИЕ: Уменьшен размер шрифта с text-xl до text-lg -->
                 <h2 class="text-lg font-semibold text-white mb-2" id="welcome-title"></h2>
                 <p class="text-gray-400 mb-6" id="user-info-text"></p>
                 <button class="button w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600" id="start-questionnaire-button">Пройти Генезис-Профиль</button>
@@ -103,9 +102,193 @@
     </div>
 
     <script>
-        // Весь JavaScript код остается без изменений
         const tg = window.Telegram.WebApp;
-        // ... и так далее
+        let currentUserId = null;
+        let currentUserData = {};
+        let questions = [];
+        let currentQuestionIndex = 0;
+        let userAnswers = {};
+
+        const ui = {
+            screens: { loading: document.getElementById('loading-screen'), register: document.getElementById('register-screen'), main: document.getElementById('main-screen'), settings: document.getElementById('settings-screen'), questionnaire: document.getElementById('questionnaire-screen'), error: document.getElementById('error-screen') },
+            buttons: { register: document.getElementById('register-button'), startQuestionnaire: document.getElementById('start-questionnaire-button'), nextQuestion: document.getElementById('next-question-button'), settings: document.getElementById('settings-button'), back: document.getElementById('back-button'), deleteProfile: document.getElementById('delete-profile-button') },
+            text: { welcomeTitle: document.getElementById('welcome-title'), userInfo: document.getElementById('user-info-text'), error: document.getElementById('error-text'), progress: document.getElementById('progress-text'), question: document.getElementById('question-text') },
+            toggles: { searchable: document.getElementById('searchable-toggle-checkbox') },
+            inputs: { inviteCode: document.getElementById('invite-code-input') },
+            containers: { inviteCodes: document.getElementById('invite-codes-container'), options: document.getElementById('options-container') }
+        };
+
+        function showScreen(screenName) {
+            Object.values(ui.screens).forEach(s => s.classList.remove('visible'));
+            ui.screens[screenName]?.classList.add('visible');
+        }
+
+        function renderInvites(invites = []) {
+            ui.containers.inviteCodes.innerHTML = '';
+            if (invites.length === 0) {
+                ui.containers.inviteCodes.innerHTML = '<p class="text-gray-500 text-sm">У вас не осталось инвайтов.</p>';
+                return;
+            }
+            invites.forEach(code => {
+                const div = document.createElement('div');
+                div.className = 'flex justify-between items-center bg-gray-700 p-3 rounded-lg';
+                div.innerHTML = `<span class="font-mono text-lg text-gray-300">${code}</span><button class="text-blue-400 hover:text-blue-300 text-sm font-semibold">Копировать</button>`;
+                div.querySelector('button').onclick = () => {
+                    navigator.clipboard.writeText(code).then(() => tg.HapticFeedback.notificationOccurred('success'));
+                    tg.showAlert('Код скопирован!');
+                };
+                ui.containers.inviteCodes.appendChild(div);
+            });
+        }
+        
+        function renderQuestion() {
+            const question = questions[currentQuestionIndex];
+            if (!question) return;
+            ui.text.question.textContent = question.text;
+            ui.text.progress.textContent = `Вопрос ${currentQuestionIndex + 1}/${questions.length}`;
+            ui.containers.options.innerHTML = '';
+            ui.buttons.nextQuestion.disabled = true;
+            question.options.forEach(optionText => {
+                const optionButton = document.createElement('button');
+                optionButton.textContent = optionText;
+                optionButton.className = 'button bg-gray-700 hover:bg-gray-600';
+                optionButton.onclick = () => {
+                    document.querySelectorAll('.option-button.selected').forEach(btn => btn.classList.remove('selected', 'bg-blue-600', 'hover:bg-blue-700'));
+                    optionButton.classList.add('selected', 'bg-blue-600', 'hover:bg-blue-700');
+                    userAnswers[question.id] = optionText;
+                    ui.buttons.nextQuestion.disabled = false;
+                };
+                ui.containers.options.appendChild(optionButton);
+            });
+        }
+
+        async function startQuestionnaire() {
+            try {
+                showScreen('loading');
+                const response = await fetch('/api/genesis_questions');
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                questions = await response.json();
+                if (questions && questions.length > 0) {
+                    currentQuestionIndex = 0; userAnswers = {};
+                    showScreen('questionnaire');
+                    renderQuestion();
+                } else {
+                    tg.showAlert('Вопросов пока нет. Зайдите позже!');
+                    showScreen('main');
+                }
+            } catch (e) {
+                tg.showAlert('Не удалось загрузить вопросы.', e.message);
+                showScreen('main');
+            }
+        }
+
+        async function nextQuestion() {
+            currentQuestionIndex++;
+            if (currentQuestionIndex < questions.length) {
+                renderQuestion();
+            } else {
+                showScreen('loading');
+                ui.screens.loading.querySelector('.text').textContent = 'Отправка ответов...';
+                await fetch('/api/submit_answers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: currentUserId, answers: userAnswers }) });
+                tg.showPopup({ title: 'Спасибо!', message: 'Ваши ответы сохранены. Мы начислили вам бонусные очки!', buttons: [{type: 'ok'}] });
+                setTimeout(() => main(), 1000);
+            }
+        }
+
+        async function updateSettings() {
+            const isSearchable = ui.toggles.searchable.checked;
+            tg.HapticFeedback.impactOccurred('light');
+            await fetch('/api/user/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: currentUserId, is_searchable: isSearchable }) });
+        }
+
+        async function deleteProfile() {
+            tg.showConfirm("Вы уверены?", async (confirmed) => {
+                if (confirmed) {
+                    await fetch('/api/user/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: currentUserId }) });
+                    tg.showAlert("Ваш профиль был удален.");
+                    setTimeout(() => window.location.reload(), 2000);
+                }
+            });
+        }
+        
+        async function main() {
+            showScreen('loading');
+            tg.ready();
+            tg.expand();
+            tg.setHeaderColor('#171717'); // bg-gray-900
+
+            if (!tg.initDataUnsafe?.user?.id) { ui.text.error.textContent = "Не удалось идентифицировать вас."; showScreen('error'); return; }
+
+            const user = tg.initDataUnsafe.user;
+            const telegramId = user.id;
+            
+            try {
+                const response = await fetch(`/api/user/status?telegram_id=${telegramId}`);
+                if (response.status === 200) {
+                     currentUserData = await response.json();
+                     currentUserId = currentUserData.user_id;
+                     ui.text.welcomeTitle.textContent = `Привет, ${user.first_name || 'Основатель'}!`;
+                     ui.text.userInfo.textContent = `Ваш баланс: ${currentUserData.points} Очков.`;
+                     ui.toggles.searchable.checked = currentUserData.is_searchable;
+                     renderInvites(currentUserData.invites);
+                     if (currentUserData.has_completed_genesis) {
+                        ui.buttons.startQuestionnaire.textContent = 'Генезис-Профиль пройден ✓';
+                        ui.buttons.startQuestionnaire.disabled = true;
+                     } else {
+                        ui.buttons.startQuestionnaire.textContent = 'Пройти Генезис-Профиль';
+                        ui.buttons.startQuestionnaire.disabled = false;
+                     }
+                     showScreen('main');
+                } else if (response.status === 404) {
+                    showScreen('register');
+                } else {
+                     const errorData = await response.json();
+                     ui.text.error.textContent = `Ошибка сервера: ${errorData.error || response.statusText}`;
+                     showScreen('error');
+                }
+            } catch (error) {
+                 ui.text.error.textContent = `Ошибка сети.`;
+                 showScreen('error');
+            }
+        }
+
+        // --- Привязка всех обработчиков событий ---
+        ui.buttons.register.addEventListener('click', async () => {
+            const registerButton = ui.buttons.register;
+            const inviteCode = ui.inputs.inviteCode.value.trim();
+            if (!inviteCode) { tg.showAlert('Пожалуйста, введите код-приглашение.'); return; }
+            registerButton.disabled = true;
+            registerButton.textContent = 'Проверка...';
+            const user = tg.initDataUnsafe.user;
+            try {
+                const response = await fetch('/api/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ telegram_id: user.id, username: user.username, first_name: user.first_name, invite_code: inviteCode })
+                });
+                const data = await response.json();
+                if (response.status === 201) {
+                    tg.showPopup({ title: 'Успех!', message: 'Вы стали участником Клуба Основателей!', buttons: [{ type: 'ok' }] });
+                    setTimeout(() => window.location.reload(), 1500);
+                } else {
+                    tg.showAlert('Ошибка регистрации', data.error || 'Попробуйте позже.');
+                    registerButton.disabled = false;
+                    registerButton.textContent = 'Подтвердить';
+                }
+            } catch (error) {
+                tg.showAlert('Ошибка сети', 'Не удалось связаться с сервером.');
+                registerButton.disabled = false;
+                registerButton.textContent = 'Подтвердить';
+            }
+        });
+        ui.buttons.startQuestionnaire.addEventListener('click', startQuestionnaire);
+        ui.buttons.nextQuestion.addEventListener('click', nextQuestion);
+        ui.buttons.settings.addEventListener('click', () => showScreen('settings'));
+        ui.buttons.back.addEventListener('click', main);
+        ui.toggles.searchable.addEventListener('change', updateSettings);
+        ui.buttons.deleteProfile.addEventListener('click', deleteProfile);
+        
+        main();
     </script>
 </body>
 </html>
