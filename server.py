@@ -1,5 +1,5 @@
 # server.py
-# ВЕРСИЯ 43: Финальная, полная, стабильная версия со всей логикой
+# ВЕРСИЯ 45: Финальная, стабильная версия со всей логикой
 
 import os
 import logging
@@ -112,7 +112,7 @@ async def register_user(request):
                     inviter_id = invite['owner_id']
                 
                 new_user_id = uuid.uuid4()
-                await connection.execute(users.insert().values(id=new_user_id, telegram_id=telegram_id, username=data.get('username'), first_name=data.get('first_name'), points=1000, invited_by_id=inviter_id))
+                await connection.execute(users.insert().values(id=new_user_id, telegram_id=telegram_id, username=data.get('username'), first_name=data.get('first_name'), points=1000, invited_by_id=inviter_id, is_searchable=True, has_completed_genesis=False))
                 
                 new_invites = [{"code": generate_invite_code(), "owner_id": new_user_id, "is_used": False} for _ in range(5)]
                 await connection.execute_many(query=invite_codes.insert(), values=new_invites)
@@ -203,16 +203,13 @@ async def on_shutdown(app):
         logging.info("Подключение к базе данных закрыто.")
 
 # --- СБОРКА И ЗАПУСК ПРИЛОЖЕНИЯ ---
-app = web.Application(middlewares=[]) # Убрали старый middleware
+app = web.Application()
 app.router.add_get('/', handle_index)
 app.router.add_get('/api/user/status', get_user_status)
 app.router.add_post('/api/register', register_user)
 app.router.add_get('/api/genesis_questions', get_genesis_questions)
 app.router.add_post('/api/submit_answers', submit_answers)
 # ... и другие роуты
-
-app.on_startup.append(on_startup)
-app.on_shutdown.append(on_shutdown)
 
 if __name__ == "__main__":
     web.run_app(app, port=int(os.getenv("PORT", 8080)), host='0.0.0.0')
