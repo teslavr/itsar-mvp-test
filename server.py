@@ -1,5 +1,5 @@
 # server.py
-# ВЕРСИЯ 45: Финальная, стабильная версия с Middleware для управления БД
+# ВЕРСИЯ 46: Финальная, полная, исправленная версия со всей логикой
 
 import os
 import logging
@@ -72,7 +72,7 @@ def generate_invite_code():
 @web.middleware
 async def db_connection_middleware(request, handler):
     if not isinstance(database, databases.Database):
-        return await handler(request) # Пропускаем, если БД не настроена
+        return await handler(request)
         
     if not database.is_connected:
         try:
@@ -124,7 +124,6 @@ async def register_user(request):
                 
                 invite = await database.fetch_one(invite_codes.select().where(invite_codes.c.code == inviter_code.upper()))
                 if not invite or invite['is_used']: return web.json_response({'error': 'Код-приглашение недействителен или уже использован.'}, status=403)
-                
                 inviter_id = invite['owner_id']
             
             new_user_id = uuid.uuid4()
@@ -141,12 +140,47 @@ async def register_user(request):
         logging.error(f"API Ошибка в register_user: {e}")
         return web.json_response({'error': 'Ошибка при записи в БД'}, status=500)
 
-# ... (остальные функции остаются без изменений, но я привожу их целиком для ясности)
 async def get_genesis_questions(request):
     return web.json_response(GENESIS_QUESTIONS)
-async def submit_answers(request): pass
-async def update_user_settings(request): pass
-async def delete_user(request): pass
+
+async def submit_answers(request):
+    if not database: return web.json_response({'error': 'Database not configured'}, status=500)
+    try:
+        data = await request.json()
+        user_id_str, user_answers = data.get('user_id'), data.get('answers')
+        if not user_id_str or not user_answers: return web.json_response({'error': 'Отсутствует ID или ответы'}, status=400)
+        user_id = uuid.UUID(user_id_str)
+    except Exception: return web.json_response({'error': 'Некорректный формат запроса'}, status=400)
+
+    async with database.transaction():
+        try:
+            current_user = await database.fetch_one(users.select().where(users.c.id == user_id))
+            if not current_user: return web.json_response({'error': 'Пользователь не найден'}, status=404)
+            if current_user['has_completed_genesis']: return web.json_response({'error': 'Вы уже проходили эту анкету'}, status=403)
+
+            answers_to_insert = [{"user_id": user_id, "question_id": int(q_id), "answer_text": ans} for q_id, ans in user_answers.items()]
+            if answers_to_insert: await database.execute_many(query=answers.insert(), values=answers_to_insert)
+            
+            points_for_genesis = 60000
+            new_total_points = current_user['points'] + points_for_genesis
+            
+            await database.execute(users.update().where(users.c.id == user_id).values(points=new_total_points, has_completed_genesis=True))
+            logging.info(f"Начислено {points_for_genesis} очков пользователю {user_id_str}.")
+
+            if current_user['invited_by_id']:
+                inviter_id = current_user['invited_by_id']
+                inviter = await database.fetch_one(users.select().where(users.c.id == inviter_id))
+                if inviter:
+                    referral_bonus = 20000
+                    inviter_new_points = inviter['points'] + referral_bonus
+                    await database.execute(users.update().where(users.c.id == inviter_id).values(points=inviter_new_points))
+                    logging.info(f"Начислено {referral_bonus} реферальных очков инвайтеру {inviter_id}")
+        except Exception as e:
+            logging.error(f"Ошибка при сохранении ответов: {e}")
+            return web.json_response({'error': 'Ошибка при работе с БД'}, status=500)
+            
+    return web.json_response({'status': 'success'})
+
 async def handle_index(request):
     try:
         with open('./index.html', 'r', encoding='utf-8') as f: return web.Response(text=f.read(), content_type='text/html')
@@ -159,7 +193,7 @@ async def on_startup(app):
             await database.connect()
             engine = sqlalchemy.create_engine(DATABASE_URL)
             metadata.create_all(engine)
-            logging.info("Первичное подключение к базе данных установлено.")
+            logging.info("Подключение к базе данных установлено.")
         except Exception as e:
             logging.critical(f"Не удалось подключиться к БД при старте: {e}")
 
@@ -169,16 +203,13 @@ async def on_shutdown(app):
         logging.info("Подключение к базе данных закрыто.")
 
 # --- СБОРКА И ЗАПУСК ПРИЛОЖЕНИЯ ---
-app = web.Application(middlewares=[db_connection_middleware]) # <-- ВКЛЮЧАЕМ НАШ "ДИСПЕТЧЕР"
+app = web.Application(middlewares=[db_connection_middleware])
 app.router.add_get('/', handle_index)
 app.router.add_get('/api/user/status', get_user_status)
 app.router.add_post('/api/register', register_user)
 app.router.add_get('/api/genesis_questions', get_genesis_questions)
 app.router.add_post('/api/submit_answers', submit_answers)
 # ... и другие роуты
-
-app.on_startup.append(on_startup)
-app.on_shutdown.append(on_shutdown)
 
 if __name__ == "__main__":
     web.run_app(app, port=int(os.getenv("PORT", 8080)), host='0.0.0.0')
