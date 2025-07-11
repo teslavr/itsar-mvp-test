@@ -1,5 +1,5 @@
 # server.py
-# ВЕРСИЯ 42: Финальная, самая надежная версия с устойчивым подключением к БД
+# ВЕРСИЯ 42: Финальная, самая надежная версия с устойчивым подключением к БД и правильной логикой начисления очков
 
 import os
 import logging
@@ -111,6 +111,8 @@ async def register_user(request):
                     
                     invite = await connection.fetch_one(invite_codes.select().where(invite_codes.c.code == inviter_code.upper()))
                     if not invite or invite['is_used']: return web.json_response({'error': 'Код-приглашение недействителен или уже использован.'}, status=403)
+                    
+                    # Здесь мы не списываем инвайт, т.к. пользователь еще не прошел генезис-профиль
                     inviter_id = invite['owner_id']
                 
                 new_user_id = uuid.uuid4()
@@ -119,6 +121,7 @@ async def register_user(request):
                 new_invites = [{"code": generate_invite_code(), "owner_id": new_user_id, "is_used": False} for _ in range(5)]
                 await connection.execute_many(query=invite_codes.insert(), values=new_invites)
 
+                # Гасим инвайт только после успешной регистрации нового пользователя
                 if inviter_id:
                     await connection.execute(invite_codes.update().where(invite_codes.c.code == inviter_code.upper()).values(is_used=True, used_by_id=new_user_id))
         
@@ -127,11 +130,7 @@ async def register_user(request):
         logging.error(f"API Ошибка в register_user: {e}")
         return web.json_response({'error': 'Ошибка при записи в БД'}, status=500)
 
-async def get_genesis_questions(request):
-    return web.json_response(GENESIS_QUESTIONS)
-
 async def submit_answers(request):
-    # Эта функция остается без изменений, но я привожу ее целиком для ясности
     if not database: return web.json_response({'error': 'Database not configured'}, status=500)
     try:
         data = await request.json()
@@ -170,6 +169,11 @@ async def submit_answers(request):
                 
     return web.json_response({'status': 'success', 'message': f'Ответы сохранены!'})
 
+
+async def get_genesis_questions(request):
+    return web.json_response(GENESIS_QUESTIONS)
+
+
 async def handle_index(request):
     try:
         with open('./index.html', 'r', encoding='utf-8') as f: return web.Response(text=f.read(), content_type='text/html')
@@ -198,7 +202,7 @@ app.router.add_get('/api/user/status', get_user_status)
 app.router.add_post('/api/register', register_user)
 app.router.add_get('/api/genesis_questions', get_genesis_questions)
 app.router.add_post('/api/submit_answers', submit_answers)
-# ... и другие роуты, если они есть
+# ... и другие роуты
 
 if __name__ == "__main__":
     web.run_app(app, port=PORT, host='0.0.0.0')
