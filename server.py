@@ -1,5 +1,5 @@
 # server.py
-# ВЕРСИЯ 41: Финальная, полная версия с исправленной и более надежной логикой начисления очков
+# ВЕРСИЯ 42: Финальная, самая надежная версия с устойчивым подключением к БД
 
 import os
 import logging
@@ -75,17 +75,16 @@ async def get_user_status(request):
     try:
         telegram_id = int(request.query['telegram_id'])
         query = users.select().where(users.c.telegram_id == telegram_id)
+        
         async with database.connection() as connection:
             user = await connection.fetch_one(query)
-        
-        if user:
-            async with database.connection() as connection:
+            if user:
                 invites_query = invite_codes.select().where(invite_codes.c.owner_id == user['id'], invite_codes.c.is_used == False)
                 user_invites = await connection.fetch_all(invites_query)
-            invite_list = [invite['code'] for invite in user_invites]
-            return web.json_response({'status': 'registered', 'user_id': str(user['id']), 'points': user['points'], 'has_completed_genesis': user['has_completed_genesis'], 'is_searchable': user['is_searchable'], 'invites': invite_list})
-        else:
-            return web.json_response({'status': 'not_registered'}, status=404)
+                invite_list = [invite['code'] for invite in user_invites]
+                return web.json_response({'status': 'registered', 'user_id': str(user['id']), 'points': user['points'], 'has_completed_genesis': user['has_completed_genesis'], 'is_searchable': user['is_searchable'], 'invites': invite_list})
+            else:
+                return web.json_response({'status': 'not_registered'}, status=404)
     except Exception as e:
         logging.error(f"API Ошибка в get_user_status: {e}")
         return web.json_response({'error': 'Ошибка сервера или БД'}, status=500)
@@ -112,11 +111,9 @@ async def register_user(request):
                     
                     invite = await connection.fetch_one(invite_codes.select().where(invite_codes.c.code == inviter_code.upper()))
                     if not invite or invite['is_used']: return web.json_response({'error': 'Код-приглашение недействителен или уже использован.'}, status=403)
-                    
                     inviter_id = invite['owner_id']
                 
                 new_user_id = uuid.uuid4()
-                # ИСПРАВЛЕНИЕ: Устанавливаем points=1000 явно, как и другие обязательные поля
                 await connection.execute(users.insert().values(id=new_user_id, telegram_id=telegram_id, username=data.get('username'), first_name=data.get('first_name'), points=1000, invited_by_id=inviter_id, is_searchable=True, has_completed_genesis=False))
                 
                 new_invites = [{"code": generate_invite_code(), "owner_id": new_user_id, "is_used": False} for _ in range(5)]
@@ -130,7 +127,11 @@ async def register_user(request):
         logging.error(f"API Ошибка в register_user: {e}")
         return web.json_response({'error': 'Ошибка при записи в БД'}, status=500)
 
+async def get_genesis_questions(request):
+    return web.json_response(GENESIS_QUESTIONS)
+
 async def submit_answers(request):
+    # Эта функция остается без изменений, но я привожу ее целиком для ясности
     if not database: return web.json_response({'error': 'Database not configured'}, status=500)
     try:
         data = await request.json()
@@ -149,10 +150,8 @@ async def submit_answers(request):
                 answers_to_insert = [{"user_id": user_id, "question_id": int(q_id), "answer_text": ans} for q_id, ans in user_answers.items()]
                 if answers_to_insert: await connection.execute_many(query=answers.insert(), values=answers_to_insert)
                 
-                # ИСПРАВЛЕНИЕ: Явно получаем текущие очки и прибавляем к ним
                 points_for_genesis = 60000
-                current_points = current_user['points']
-                new_total_points = current_points + points_for_genesis
+                new_total_points = current_user['points'] + points_for_genesis
                 
                 await connection.execute(users.update().where(users.c.id == user_id).values(points=new_total_points, has_completed_genesis=True))
                 logging.info(f"Начислено {points_for_genesis} очков пользователю {user_id_str}. Новый баланс: {new_total_points}")
@@ -170,10 +169,6 @@ async def submit_answers(request):
                 return web.json_response({'error': 'Ошибка при работе с БД'}, status=500)
                 
     return web.json_response({'status': 'success', 'message': f'Ответы сохранены!'})
-
-
-async def get_genesis_questions(request):
-    return web.json_response(GENESIS_QUESTIONS)
 
 async def handle_index(request):
     try:
@@ -203,7 +198,7 @@ app.router.add_get('/api/user/status', get_user_status)
 app.router.add_post('/api/register', register_user)
 app.router.add_get('/api/genesis_questions', get_genesis_questions)
 app.router.add_post('/api/submit_answers', submit_answers)
-# ... и другие роуты
+# ... и другие роуты, если они есть
 
 if __name__ == "__main__":
     web.run_app(app, port=PORT, host='0.0.0.0')
