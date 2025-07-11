@@ -1,4 +1,4 @@
-<!-- ВЕРСИЯ 39: Финальная, полная, со всеми элементами и обработчиками -->
+<!-- ВЕРСИЯ 43: Финальная, полная, исправленная -->
 <!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -20,23 +20,15 @@
         .header { display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 20px; }
         .header .logo { margin-bottom: 0; }
         .settings-icon { font-size: 24px; cursor: pointer; color: var(--tg-theme-hint-color, #999999); }
-        .settings-row { display: flex; justify-content: space-between; align-items: center; text-align: left; padding: 15px 0; border-bottom: 1px solid #333; }
-        .settings-row label { font-size: 16px; }
-        .toggle { position: relative; display: inline-block; width: 51px; height: 31px; }
-        .toggle input { opacity: 0; width: 0; height: 0; }
-        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 34px; }
-        .slider:before { position: absolute; content: ""; height: 23px; width: 23px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
-        input:checked + .slider { background-color: #2196F3; }
-        input:checked + .slider:before { transform: translateX(20px); }
-        .options-grid { display: grid; grid-template-columns: 1fr; gap: 10px; margin-bottom: 20px; }
-        .option-button { background-color: #333; border: 1px solid #555; color: #fff; }
-        .option-button.selected { background-color: var(--tg-theme-button-color, #007aff); border-color: var(--tg-theme-button-color, #007aff); }
         .invite-section { width: 100%; margin-top: 20px; padding: 20px; background-color: rgba(0,0,0,0.1); border-radius: 12px; }
         .invite-code-list { max-height: 150px; overflow-y: auto; margin-top: 15px; }
         .invite-code { display: flex; justify-content: space-between; align-items: center; background-color: #333; padding: 10px 15px; border-radius: 8px; margin-bottom: 10px; }
         .invite-code span { font-family: monospace; font-size: 18px; letter-spacing: 2px; }
         .copy-btn { background: none; border: none; color: var(--tg-theme-button-color, #007aff); cursor: pointer; font-size: 14px; }
         .text-input { width: 100%; padding: 15px; border-radius: 8px; border: 1px solid #555; background-color: #444; color: #fff; text-align: center; font-family: 'Inter', sans-serif; font-size: 18px; box-sizing: border-box; margin-bottom: 20px; text-transform: uppercase; }
+        .options-grid { display: grid; grid-template-columns: 1fr; gap: 10px; margin-bottom: 20px; }
+        .option-button { background-color: #333; border: 1px solid #555; color: #fff; }
+        .option-button.selected { background-color: var(--tg-theme-button-color, #007aff); border-color: var(--tg-theme-button-color, #007aff); }
     </style>
 </head>
 <body>
@@ -74,7 +66,6 @@
     <script>
         const tg = window.Telegram.WebApp;
         let currentUserId = null;
-        let currentUserData = {};
         let questions = [];
         let currentQuestionIndex = 0;
         let userAnswers = {};
@@ -91,24 +82,6 @@
         function showScreen(screenName) {
             Object.values(ui.screens).forEach(s => s.classList.remove('visible'));
             ui.screens[screenName]?.classList.add('visible');
-        }
-
-        function renderInvites(invites = []) {
-            ui.containers.inviteCodes.innerHTML = '';
-            if (invites.length === 0) {
-                ui.containers.inviteCodes.innerHTML = '<p class="text" style="font-size:14px; margin-bottom:0;">У вас не осталось инвайтов.</p>';
-                return;
-            }
-            invites.forEach(code => {
-                const div = document.createElement('div');
-                div.className = 'invite-code';
-                div.innerHTML = `<span>${code}</span><button class="copy-btn">Копировать</button>`;
-                div.querySelector('.copy-btn').onclick = () => {
-                    navigator.clipboard.writeText(code).then(() => tg.HapticFeedback.notificationOccurred('success'));
-                    tg.showAlert('Код скопирован!');
-                };
-                ui.containers.inviteCodes.appendChild(div);
-            });
         }
         
         function renderQuestion() {
@@ -164,22 +137,6 @@
                 setTimeout(() => main(), 1000);
             }
         }
-
-        async function updateSettings() {
-            const isSearchable = ui.toggles.searchable.checked;
-            tg.HapticFeedback.impactOccurred('light');
-            await fetch('/api/user/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: currentUserId, is_searchable: isSearchable }) });
-        }
-
-        async function deleteProfile() {
-            tg.showConfirm("Вы уверены?", async (confirmed) => {
-                if (confirmed) {
-                    await fetch('/api/user/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: currentUserId }) });
-                    tg.showAlert("Ваш профиль был удален.");
-                    setTimeout(() => window.location.reload(), 2000);
-                }
-            });
-        }
         
         async function main() {
             showScreen('loading');
@@ -195,13 +152,13 @@
             try {
                 const response = await fetch(`/api/user/status?telegram_id=${telegramId}`);
                 if (response.status === 200) {
-                     currentUserData = await response.json();
-                     currentUserId = currentUserData.user_id;
+                     const data = await response.json();
+                     currentUserId = data.user_id;
                      ui.text.welcomeTitle.textContent = `Привет, ${user.first_name || 'Основатель'}!`;
-                     ui.text.userInfo.textContent = `Ваш баланс: ${currentUserData.points} Очков.`;
-                     ui.toggles.searchable.checked = currentUserData.is_searchable;
-                     renderInvites(currentUserData.invites);
-                     if (currentUserData.has_completed_genesis) {
+                     ui.text.userInfo.textContent = `Ваш баланс: ${data.points} Очков.`;
+                     ui.toggles.searchable.checked = data.is_searchable;
+                     renderInvites(data.invites);
+                     if (data.has_completed_genesis) {
                         ui.buttons.startQuestionnaire.textContent = 'Генезис-Профиль пройден ✓';
                         ui.buttons.startQuestionnaire.disabled = true;
                      } else {
@@ -222,7 +179,6 @@
             }
         }
 
-        // --- Привязка всех обработчиков событий ---
         ui.buttons.register.addEventListener('click', async () => {
             const registerButton = ui.buttons.register;
             const inviteCode = ui.inputs.inviteCode.value.trim();
@@ -251,12 +207,9 @@
                 registerButton.textContent = 'Подтвердить';
             }
         });
+
         ui.buttons.startQuestionnaire.addEventListener('click', startQuestionnaire);
         ui.buttons.nextQuestion.addEventListener('click', nextQuestion);
-        ui.buttons.settings.addEventListener('click', () => showScreen('settings'));
-        ui.buttons.back.addEventListener('click', main);
-        ui.toggles.searchable.addEventListener('change', updateSettings);
-        ui.buttons.deleteProfile.addEventListener('click', deleteProfile);
         
         main();
     </script>
