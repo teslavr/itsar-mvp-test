@@ -1,5 +1,5 @@
 # server.py
-# ВЕРСИЯ 50: Финальная, полная, стабильная версия со всей логикой
+# ВЕРСИЯ 52: Финальная, полная, стабильная версия со всей логикой
 
 import os
 import logging
@@ -139,7 +139,7 @@ async def register_user(request):
             await database.execute(users.insert().values(
                 id=new_user_id, telegram_id=telegram_id, username=data.get('username'), 
                 first_name=data.get('first_name'), points=1000, invited_by_id=inviter_id,
-                airdrop_multiplier=multiplier
+                airdrop_multiplier=multiplier, is_searchable=True, has_completed_genesis=False
             ))
             
             new_invites = [{"code": generate_invite_code(), "owner_id": new_user_id, "is_used": False} for _ in range(5)]
