@@ -1,5 +1,5 @@
 # server.py
-# ВЕРСИЯ 49: Финальная, полная, стабильная версия со всей логикой
+# ВЕРСИЯ 50: Финальная, полная, стабильная версия со всей логикой
 
 import os
 import logging
@@ -154,7 +154,20 @@ async def register_user(request):
         return web.json_response({'error': 'Ошибка при записи в БД'}, status=500)
 
 async def get_genesis_questions(request):
-    return web.json_response(GENESIS_QUESTIONS)
+    try:
+        async with database.connection() as connection:
+            questions_from_db = await connection.fetch_all(questions.select())
+            if not questions_from_db and GENESIS_QUESTIONS:
+                logging.info("Таблица 'questions' пуста. Заполняем...")
+                questions_to_insert = [{"id": q["id"], "text": q["text"], "category": q["category"], "options": q.get("options")} for q in GENESIS_QUESTIONS]
+                await connection.execute_many(query=questions.insert(), values=questions_to_insert)
+                return web.json_response(GENESIS_QUESTIONS)
+            
+            response_data = [{"id": q["id"], "text": q["text"], "category": q["category"], "options": q["options"]} for q in questions_from_db]
+            return web.json_response(response_data)
+    except Exception as e:
+        logging.error(f"Ошибка при получении вопросов: {e}")
+        return web.json_response({'error': 'Не удалось подготовить вопросы'}, status=500)
 
 async def submit_answers(request):
     try:
@@ -204,7 +217,7 @@ async def on_startup(app):
             await database.connect()
             engine = sqlalchemy.create_engine(DATABASE_URL)
             metadata.create_all(engine)
-            logging.info("Подключение к базе данных установлено.")
+            logging.info("Первичное подключение к базе данных установлено.")
         except Exception as e:
             logging.critical(f"Не удалось подключиться к БД при старте: {e}")
 
