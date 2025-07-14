@@ -1,4 +1,4 @@
-<!-- ВЕРСИЯ 55: Финальная, полная, со всей рабочей логикой и новым дизайном -->
+<!-- ВЕРСИЯ 57: Финальная, полная, с исправленной версткой анкеты -->
 <!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -9,23 +9,12 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=Inter:wght@400;500;600;700&display=swap');
-        
-        body {
-            font-family: 'Inter', sans-serif;
-            -webkit-font-smoothing: antialiased;
-            -moz-osx-font-smoothing: grayscale;
-        }
-        
-        .logo-font {
-            font-family: 'Cinzel', serif;
-        }
-
+        body { font-family: 'Inter', sans-serif; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+        .logo-font { font-family: 'Cinzel', serif; }
         .container { display: none; }
         .container.visible { display: block; }
-        
         .toggle-checkbox:checked + .toggle-label { background-color: #3B82F6; }
         .toggle-checkbox:checked + .toggle-label .toggle-ball { transform: translateX(100%); }
-        
         .option-button.selected {
             background-color: #2563EB; /* blue-600 */
             border-color: #2563EB;
@@ -36,16 +25,11 @@
 
     <div class="w-full max-w-md mx-auto">
 
-        <!-- Экран загрузки -->
         <div id="loading-screen" class="container visible text-center">
-            <div class="flex items-end justify-center gap-x-2 mb-4">
-                <h1 class="logo-font text-5xl font-bold text-white tracking-wider">Feudāta</h1>
-                <img src="https://i.imgur.com/YrnQETI.jpeg" alt="Иконка" class="h-12 w-12 rounded-full mb-1">
-            </div>
+            <div class="flex items-end justify-center gap-x-2 mb-4"><h1 class="logo-font text-5xl font-bold text-white tracking-wider">Feudāta</h1><img src="https://i.imgur.com/YrnQETI.jpeg" alt="Иконка" class="h-12 w-12 rounded-full mb-1"></div>
             <p class="text-gray-400">Проверка вашего статуса...</p>
         </div>
 
-        <!-- Экран регистрации -->
         <div id="register-screen" class="container bg-gray-800 p-8 rounded-2xl shadow-lg">
             <div class="flex items-end justify-center gap-x-2 mb-4"><h1 class="logo-font text-4xl font-bold text-white tracking-wider">Feudāta</h1><img src="https://i.imgur.com/YrnQETI.jpeg" alt="Иконка" class="h-10 w-10 rounded-full mb-1"></div>
             <h2 class="text-2xl font-semibold text-white mb-2">Вступить в Клуб</h2>
@@ -54,7 +38,6 @@
             <button class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition active:scale-95" id="register-button">Подтвердить</button>
         </div>
         
-        <!-- Главный экран -->
         <div id="main-screen" class="container">
             <div class="flex justify-between items-center w-full mb-8">
                 <div class="flex items-end justify-center gap-x-2"><h1 class="logo-font text-4xl font-bold text-white tracking-wider">Feudāta</h1><img src="https://i.imgur.com/YrnQETI.jpeg" alt="Иконка" class="h-10 w-10 rounded-full mb-1"></div>
