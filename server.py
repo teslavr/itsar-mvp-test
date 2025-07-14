@@ -1,5 +1,5 @@
 # server.py
-# ВЕРСИЯ 53: Финальная, самая надежная версия
+# ВЕРСИЯ 54: Финальная, полная, со всеми восстановленными функциями
 
 import os
 import logging
@@ -13,17 +13,25 @@ import databases
 
 # --- КОНФИГУРАЦИЯ ---
 DATABASE_URL = os.getenv("DATABASE_URL")
-if not DATABASE_URL:
-    logging.critical("КРИТИЧЕСКАЯ ОШИБКА: Переменная DATABASE_URL не установлена!")
-    exit()
-
+BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN") 
 PORT = int(os.getenv("PORT", 8080))
 MASTER_INVITE_CODE = "ITSAR-GENESIS-1"
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
+# --- ЗАГРУЗКА ВОПРОСОВ ИЗ ФАЙЛА ---
+def load_questions_from_file():
+    try:
+        with open('questions.json', 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception as e:
+        logging.error(f"Критическая ошибка при чтении questions.json: {e}")
+        return []
+
+GENESIS_QUESTIONS = load_questions_from_file()
+
 # --- НАСТРОЙКА БАЗЫ ДАННЫХ И ТАБЛИЦ ---
-database = databases.Database(DATABASE_URL)
+database = None
 metadata = sqlalchemy.MetaData()
 
 users = sqlalchemy.Table(
@@ -49,6 +57,14 @@ invite_codes = sqlalchemy.Table(
     sqlalchemy.Column("used_by_id", UUID(as_uuid=True), sqlalchemy.ForeignKey("users.id"), nullable=True),
 )
 
+questions = sqlalchemy.Table("questions", metadata, sqlalchemy.Column("id", sqlalchemy.Integer, primary_key=True, autoincrement=False), sqlalchemy.Column("text", sqlalchemy.String), sqlalchemy.Column("category", sqlalchemy.String), sqlalchemy.Column("options", sqlalchemy.JSON))
+answers = sqlalchemy.Table("answers", metadata, sqlalchemy.Column("id", sqlalchemy.Integer, primary_key=True, autoincrement=True), sqlalchemy.Column("user_id", UUID), sqlalchemy.Column("question_id", sqlalchemy.Integer), sqlalchemy.Column("answer_text", sqlalchemy.String))
+
+if DATABASE_URL:
+    database = databases.Database(DATABASE_URL)
+else:
+    logging.critical("Критическая ошибка: Переменная DATABASE_URL не установлена!")
+
 # --- ХЕЛПЕРЫ ---
 def generate_invite_code():
     return secrets.token_hex(4).upper()
@@ -63,16 +79,21 @@ def get_multiplier_for_user(user_count):
 # --- MIDDLEWARE ДЛЯ УПРАВЛЕНИЯ ПОДКЛЮЧЕНИЕМ К БД ---
 @web.middleware
 async def db_connection_middleware(request, handler):
+    if not isinstance(database, databases.Database):
+        return await handler(request)
+        
     if not database.is_connected:
         try:
             await database.connect()
+            logging.info("Установлено новое подключение к базе данных (middleware).")
         except Exception as e:
             logging.error(f"Не удалось переподключиться к БД: {e}")
-            return web.json_response({'error': 'Сервис временно недоступен'}, status=503)
+            return web.json_response({'error': 'Сервис временно недоступен, попробуйте через минуту.'}, status=503)
     
     return await handler(request)
 
 # --- ОБРАБОТЧИКИ ЗАПРОСОВ (API) ---
+
 async def get_user_status(request):
     try:
         telegram_id = int(request.query['telegram_id'])
@@ -88,7 +109,7 @@ async def get_user_status(request):
             return web.json_response({'status': 'not_registered'}, status=404)
     except Exception as e:
         logging.error(f"API Ошибка в get_user_status: {e}")
-        return web.json_response({'error': 'Ошибка сервера'}, status=500)
+        return web.json_response({'error': 'Ошибка сервера или БД'}, status=500)
 
 async def register_user(request):
     try:
@@ -131,24 +152,80 @@ async def register_user(request):
         logging.error(f"API Ошибка в register_user: {e}")
         return web.json_response({'error': 'Ошибка при записи в БД'}, status=500)
 
+async def get_genesis_questions(request):
+    try:
+        async with database.connection() as connection:
+            questions_from_db = await connection.fetch_all(questions.select())
+            if not questions_from_db and GENESIS_QUESTIONS:
+                logging.info("Таблица 'questions' пуста. Заполняем...")
+                questions_to_insert = [{"id": q["id"], "text": q["text"], "category": q["category"], "options": q.get("options")} for q in GENESIS_QUESTIONS]
+                await connection.execute_many(query=questions.insert(), values=questions_to_insert)
+                return web.json_response(GENESIS_QUESTIONS)
+            
+            response_data = [{"id": q["id"], "text": q["text"], "category": q["category"], "options": q["options"]} for q in questions_from_db]
+            return web.json_response(response_data)
+    except Exception as e:
+        logging.error(f"Ошибка при получении вопросов: {e}")
+        return web.json_response({'error': 'Не удалось подготовить вопросы'}, status=500)
+
+async def submit_answers(request):
+    try:
+        data = await request.json()
+        user_id = uuid.UUID(data.get('user_id'))
+        user_answers = data.get('answers')
+
+        async with database.transaction():
+            current_user = await database.fetch_one(users.select().where(users.c.id == user_id))
+            if not current_user or current_user['has_completed_genesis']:
+                return web.json_response({'error': 'Действие недоступно'}, status=403)
+
+            answers_to_insert = [{"user_id": user_id, "question_id": int(q_id), "answer_text": ans} for q_id, ans in user_answers.items()]
+            if answers_to_insert: await database.execute_many(query=answers.insert(), values=answers_to_insert)
+            
+            points_for_genesis = 60000
+            total_points_to_add = points_for_genesis * current_user['airdrop_multiplier']
+            
+            await database.execute(users.update().where(users.c.id == user_id).values(
+                points=users.c.points + total_points_to_add,
+                has_completed_genesis=True
+            ))
+            
+            if current_user['invited_by_id']:
+                inviter_id = current_user['invited_by_id']
+                inviter = await database.fetch_one(users.select().where(users.c.id == inviter_id))
+                if inviter:
+                    bonus_points = 20000
+                    kickback_points = points_for_genesis * 0.15
+                    total_referral_points = (bonus_points + kickback_points) * inviter['airdrop_multiplier']
+                    
+                    await database.execute(users.update().where(users.c.id == inviter_id).values(
+                        points=users.c.points + total_referral_points
+                    ))
+                    logging.info(f"Начислено {total_referral_points} очков инвайтеру {inviter_id}")
+
+        return web.json_response({'status': 'success'})
+    except Exception as e:
+        logging.error(f"Ошибка в submit_answers: {e}")
+        return web.json_response({'error': 'Ошибка на сервере'}, status=500)
+
 async def handle_index(request):
     try:
         with open('./index.html', 'r', encoding='utf-8') as f: return web.Response(text=f.read(), content_type='text/html')
     except FileNotFoundError: return web.Response(text="404: Not Found", status=404)
 
 # --- УПРАВЛЕНИЕ ЖИЗНЕННЫМ ЦИКЛОМ ПРИЛОЖЕНИЯ ---
-async def startup_event():
-    try:
-        engine = sqlalchemy.create_engine(DATABASE_URL)
-        metadata.create_all(engine)
-        logging.info("Структура таблиц в БД проверена/создана.")
-        await database.connect()
-        logging.info("Подключение к базе данных установлено.")
-    except Exception as e:
-        logging.critical(f"Не удалось инициализировать БД при старте: {e}")
+async def on_startup(app):
+    if database:
+        try:
+            await database.connect()
+            engine = sqlalchemy.create_engine(DATABASE_URL)
+            metadata.create_all(engine)
+            logging.info("Первичное подключение к базе данных установлено.")
+        except Exception as e:
+            logging.critical(f"Не удалось подключиться к БД при старте: {e}")
 
-async def shutdown_event():
-    if database.is_connected:
+async def on_shutdown(app):
+    if database and database.is_connected:
         await database.disconnect()
         logging.info("Подключение к базе данных закрыто.")
 
@@ -157,10 +234,8 @@ app = web.Application(middlewares=[db_connection_middleware])
 app.router.add_get('/', handle_index)
 app.router.add_get('/api/user/status', get_user_status)
 app.router.add_post('/api/register', register_user)
-# ... и другие роуты
-
-app.on_startup.append(lambda _: startup_event())
-app.on_shutdown.append(lambda _: shutdown_event())
+app.router.add_get('/api/genesis_questions', get_genesis_questions)
+app.router.add_post('/api/submit_answers', submit_answers)
 
 if __name__ == "__main__":
     web.run_app(app, port=int(os.getenv("PORT", 8080)), host='0.0.0.0')
