@@ -1,5 +1,5 @@
 # server.py
-# ВЕРСИЯ 46: Финальная, полная, исправленная версия со всей логикой
+# ВЕРСИЯ 49: Финальная, полная, стабильная версия со всей логикой
 
 import os
 import logging
@@ -44,6 +44,7 @@ users = sqlalchemy.Table(
     sqlalchemy.Column("invited_by_id", UUID(as_uuid=True), sqlalchemy.ForeignKey("users.id"), nullable=True),
     sqlalchemy.Column("has_completed_genesis", sqlalchemy.Boolean, default=False, nullable=False),
     sqlalchemy.Column("is_searchable", sqlalchemy.Boolean, default=True, nullable=False),
+    sqlalchemy.Column("airdrop_multiplier", sqlalchemy.Float, default=1.0, nullable=False),
     sqlalchemy.Column("created_at", sqlalchemy.DateTime, server_default=sqlalchemy.func.now()),
 )
 
@@ -67,6 +68,13 @@ else:
 # --- ХЕЛПЕРЫ ---
 def generate_invite_code():
     return secrets.token_hex(4).upper()
+
+def get_multiplier_for_user(user_count):
+    if user_count < 100: return 10.0
+    if user_count < 1000: return 5.0
+    if user_count < 10000: return 2.0
+    if user_count < 100000: return 1.0
+    return 0.2
 
 # --- MIDDLEWARE ДЛЯ УПРАВЛЕНИЯ ПОДКЛЮЧЕНИЕМ К БД ---
 @web.middleware
@@ -118,16 +126,21 @@ async def register_user(request):
             
             if user_count == 0:
                 if not inviter_code or inviter_code.upper() != MASTER_INVITE_CODE:
-                    return web.json_response({'error': 'Неверный мастер-код для первого пользователя.'}, status=403)
+                    return web.json_response({'error': 'Неверный мастер-код'}, status=403)
             else:
-                if not inviter_code: return web.json_response({'error': 'Требуется код-приглашение.'}, status=403)
-                
+                if not inviter_code: return web.json_response({'error': 'Требуется приглашение'}, status=403)
                 invite = await database.fetch_one(invite_codes.select().where(invite_codes.c.code == inviter_code.upper()))
-                if not invite or invite['is_used']: return web.json_response({'error': 'Код-приглашение недействителен или уже использован.'}, status=403)
+                if not invite or invite['is_used']: return web.json_response({'error': 'Код недействителен'}, status=403)
                 inviter_id = invite['owner_id']
             
             new_user_id = uuid.uuid4()
-            await database.execute(users.insert().values(id=new_user_id, telegram_id=telegram_id, username=data.get('username'), first_name=data.get('first_name'), points=1000, invited_by_id=inviter_id, is_searchable=True, has_completed_genesis=False))
+            multiplier = get_multiplier_for_user(user_count)
+            
+            await database.execute(users.insert().values(
+                id=new_user_id, telegram_id=telegram_id, username=data.get('username'), 
+                first_name=data.get('first_name'), points=1000, invited_by_id=inviter_id,
+                airdrop_multiplier=multiplier
+            ))
             
             new_invites = [{"code": generate_invite_code(), "owner_id": new_user_id, "is_used": False} for _ in range(5)]
             await database.execute_many(query=invite_codes.insert(), values=new_invites)
@@ -144,42 +157,40 @@ async def get_genesis_questions(request):
     return web.json_response(GENESIS_QUESTIONS)
 
 async def submit_answers(request):
-    if not database: return web.json_response({'error': 'Database not configured'}, status=500)
     try:
         data = await request.json()
-        user_id_str, user_answers = data.get('user_id'), data.get('answers')
-        if not user_id_str or not user_answers: return web.json_response({'error': 'Отсутствует ID или ответы'}, status=400)
-        user_id = uuid.UUID(user_id_str)
-    except Exception: return web.json_response({'error': 'Некорректный формат запроса'}, status=400)
+        user_id = uuid.UUID(data.get('user_id'))
 
-    async with database.transaction():
-        try:
+        async with database.transaction():
             current_user = await database.fetch_one(users.select().where(users.c.id == user_id))
-            if not current_user: return web.json_response({'error': 'Пользователь не найден'}, status=404)
-            if current_user['has_completed_genesis']: return web.json_response({'error': 'Вы уже проходили эту анкету'}, status=403)
+            if not current_user or current_user['has_completed_genesis']:
+                return web.json_response({'error': 'Действие недоступно'}, status=403)
 
-            answers_to_insert = [{"user_id": user_id, "question_id": int(q_id), "answer_text": ans} for q_id, ans in user_answers.items()]
-            if answers_to_insert: await database.execute_many(query=answers.insert(), values=answers_to_insert)
-            
             points_for_genesis = 60000
-            new_total_points = current_user['points'] + points_for_genesis
+            total_points_to_add = points_for_genesis * current_user['airdrop_multiplier']
             
-            await database.execute(users.update().where(users.c.id == user_id).values(points=new_total_points, has_completed_genesis=True))
-            logging.info(f"Начислено {points_for_genesis} очков пользователю {user_id_str}.")
-
+            await database.execute(users.update().where(users.c.id == user_id).values(
+                points=users.c.points + total_points_to_add,
+                has_completed_genesis=True
+            ))
+            
             if current_user['invited_by_id']:
                 inviter_id = current_user['invited_by_id']
                 inviter = await database.fetch_one(users.select().where(users.c.id == inviter_id))
                 if inviter:
-                    referral_bonus = 20000
-                    inviter_new_points = inviter['points'] + referral_bonus
-                    await database.execute(users.update().where(users.c.id == inviter_id).values(points=inviter_new_points))
-                    logging.info(f"Начислено {referral_bonus} реферальных очков инвайтеру {inviter_id}")
-        except Exception as e:
-            logging.error(f"Ошибка при сохранении ответов: {e}")
-            return web.json_response({'error': 'Ошибка при работе с БД'}, status=500)
-            
-    return web.json_response({'status': 'success'})
+                    bonus_points = 20000
+                    kickback_points = points_for_genesis * 0.15
+                    total_referral_points = (bonus_points + kickback_points) * inviter['airdrop_multiplier']
+                    
+                    await database.execute(users.update().where(users.c.id == inviter_id).values(
+                        points=users.c.points + total_referral_points
+                    ))
+                    logging.info(f"Начислено {total_referral_points} очков инвайтеру {inviter_id}")
+
+        return web.json_response({'status': 'success'})
+    except Exception as e:
+        logging.error(f"Ошибка в submit_answers: {e}")
+        return web.json_response({'error': 'Ошибка на сервере'}, status=500)
 
 async def handle_index(request):
     try:
@@ -209,7 +220,6 @@ app.router.add_get('/api/user/status', get_user_status)
 app.router.add_post('/api/register', register_user)
 app.router.add_get('/api/genesis_questions', get_genesis_questions)
 app.router.add_post('/api/submit_answers', submit_answers)
-# ... и другие роуты
 
 if __name__ == "__main__":
     web.run_app(app, port=int(os.getenv("PORT", 8080)), host='0.0.0.0')
