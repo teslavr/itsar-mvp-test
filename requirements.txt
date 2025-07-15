@@ -1,4 +1,4 @@
-aiohttp
-databases[postgresql]
-sqlalchemy
+Flask
+Flask-SQLAlchemy
 psycopg2-binary
+gunicorn
