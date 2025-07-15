@@ -92,9 +92,11 @@ async def db_connection_middleware(request, handler):
 async def get_user_status(request):
     try:
         telegram_id = int(request.query['telegram_id'])
-        user = await database.fetch_one(query=users.select().where(users.c.telegram_id == telegram_id))
+        query = users.select().where(users.c.telegram_id == telegram_id)
+        user = await database.fetch_one(query)
         if user:
-            user_invites = await database.fetch_all(query=invite_codes.select().where(invite_codes.c.owner_id == user['id'], invite_codes.c.is_used == False))
+            invites_query = invite_codes.select().where(invite_codes.c.owner_id == user['id'], invite_codes.c.is_used == False)
+            user_invites = await database.fetch_all(invites_query)
             return web.json_response({'status': 'registered', 'user_id': str(user['id']), 'points': user['points'], 'has_completed_genesis': user['has_completed_genesis'], 'is_searchable': user['is_searchable'], 'invites': [i['code'] for i in user_invites]})
         else:
             return web.json_response({'status': 'not_registered'}, status=404)
@@ -119,8 +121,14 @@ async def register_user(request):
                 if not invite or invite['is_used']: return web.json_response({'error': 'Код недействителен'}, status=403)
                 inviter_id = invite['owner_id']
             new_user_id = uuid.uuid4()
-            await database.execute(users.insert().values(id=new_user_id, telegram_id=telegram_id, username=data.get('username'), first_name=data.get('first_name'), points=1000, invited_by_id=inviter_id, airdrop_multiplier=get_multiplier_for_user(user_count)))
-            await database.execute_many(query=invite_codes.insert(), values=[{"code": generate_invite_code(), "owner_id": new_user_id} for _ in range(5)])
+            await database.execute(users.insert().values(
+                id=new_user_id, telegram_id=telegram_id, username=data.get('username'), 
+                first_name=data.get('first_name'), points=1000, invited_by_id=inviter_id,
+                airdrop_multiplier=get_multiplier_for_user(user_count),
+                is_searchable=True, has_completed_genesis=False # ИСПРАВЛЕНИЕ: Добавлены недостающие поля
+            ))
+            new_invites = [{"code": generate_invite_code(), "owner_id": new_user_id, "is_used": False} for _ in range(5)]
+            await database.execute_many(query=invite_codes.insert(), values=new_invites)
             if inviter_id:
                 await database.execute(invite_codes.update().where(invite_codes.c.code == inviter_code.upper()).values(is_used=True, used_by_id=new_user_id))
         return web.json_response({'status': 'success'}, status=201)
@@ -132,7 +140,7 @@ async def get_genesis_questions(request):
     try:
         count = await database.fetch_val(query=sqlalchemy.select(sqlalchemy.func.count(questions.c.id)))
         if count == 0 and GENESIS_QUESTIONS:
-            questions_to_insert = [{"id": q["id"], "text": q["text"], "category": q["category"], "options": json.dumps(q.get("options"))} for q in GENESIS_QUESTIONS]
+            questions_to_insert = [{"id": q["id"], "text": q["text"], "category": q["category"], "options": q.get("options")} for q in GENESIS_QUESTIONS]
             await database.execute_many(query=questions.insert(), values=questions_to_insert)
         
         questions_from_db = await database.fetch_all(questions.select())
