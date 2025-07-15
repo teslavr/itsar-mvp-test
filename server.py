@@ -1,239 +1,221 @@
-# server.py
-# ВЕРСИЯ 63: Финальная, полная, стабильная версия со всей логикой
-
 import os
-import logging
-import uuid
+import hmac
+import hashlib
 import json
-import secrets
-from aiohttp import web
-import sqlalchemy
+from urllib.parse import unquote
+import uuid
+
+from flask import Flask, request, jsonify
+from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.dialects.postgresql import UUID
-import databases
 
-# --- КОНФИГУРАЦИЯ ---
-DATABASE_URL = os.getenv("DATABASE_URL")
-BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN") 
-PORT = int(os.getenv("PORT", 8080))
-MASTER_INVITE_CODE = "FEUDATA-GENESIS-1"
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+# --- Конфигурация ---
+app = Flask(__name__)
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'postgresql://user:password@localhost/feudata')
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# --- ЗАГРУЗКА ВОПРОСОВ ИЗ ФАЙЛА ---
-def load_questions_from_file():
+db = SQLAlchemy(app)
+BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
+MASTER_INVITE_CODE = os.environ.get('MASTER_INVITE_CODE', 'FEUDATA-GENESIS-1')
+
+# --- Модели Базы Данных ---
+class User(db.Model):
+    __tablename__ = 'users'
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    telegram_id = db.Column(db.BigInteger, unique=True, nullable=False)
+    first_name = db.Column(db.String, nullable=True)
+    username = db.Column(db.String, nullable=True)
+    points = db.Column(db.BigInteger, default=0)
+    airdrop_multiplier = db.Column(db.Float, default=1.0)
+    invited_by_id = db.Column(UUID(as_uuid=True), db.ForeignKey('users.id'), nullable=True)
+    has_completed_genesis = db.Column(db.Boolean, default=False)
+    is_searchable = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.TIMESTAMP, server_default=db.func.now())
+
+    inviter = db.relationship('User', remote_side=[id], backref='referrals')
+
+class InviteCode(db.Model):
+    __tablename__ = 'invite_codes'
+    id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(db.String, unique=True, nullable=False)
+    owner_id = db.Column(UUID(as_uuid=True), db.ForeignKey('users.id'), nullable=False)
+    is_used = db.Column(db.Boolean, default=False)
+    used_by_id = db.Column(UUID(as_uuid=True), db.ForeignKey('users.id'), nullable=True)
+
+    owner = db.relationship('User', backref='owned_invite_codes', foreign_keys=[owner_id])
+    used_by = db.relationship('User', backref='used_invite_code', foreign_keys=[used_by_id])
+
+# НОВАЯ МОДЕЛЬ ДЛЯ ХРАНЕНИЯ ОТВЕТОВ
+class GenesisAnswer(db.Model):
+    __tablename__ = 'genesis_answers'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(UUID(as_uuid=True), db.ForeignKey('users.id'), nullable=False)
+    question_id = db.Column(db.String, nullable=False) # ID вопроса из questions.json
+    answer_text = db.Column(db.String, nullable=False) # Текст ответа
+    submitted_at = db.Column(db.TIMESTAMP, server_default=db.func.now())
+    
+    user = db.relationship('User', backref='genesis_answers')
+
+
+# --- Логика Валидации Telegram ---
+def validate_init_data(init_data_str):
+    if not BOT_TOKEN:
+        print("Warning: TELEGRAM_BOT_TOKEN is not set. Skipping validation.")
+        try:
+            params = dict(p.split('=') for p in init_data_str.split('&'))
+            user_data = json.loads(unquote(params['user']))
+            return user_data
+        except:
+            return None
+
+    try:
+        params = sorted([p.split('=') for p in init_data_str.split('&') if p.startswith('hash=') is False])
+        data_check_string = "\n".join([f"{k}={v}" for k, v in params])
+        received_hash = dict(p.split('=') for p in init_data_str.split('&'))['hash']
+        secret_key = hmac.new("WebAppData".encode(), BOT_TOKEN.encode(), hashlib.sha256).digest()
+        calculated_hash = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
+
+        if calculated_hash == received_hash:
+            user_param = dict(p.split('=') for p in init_data_str.split('&'))['user']
+            return json.loads(unquote(user_param))
+        return None
+    except Exception as e:
+        print(f"Validation error: {e}")
+        return None
+
+# --- Middleware для защиты роутов ---
+@app.before_request
+def before_request_func():
+    if request.path == '/' or request.path.startswith('/static'):
+        return
+    if request.path.startswith('/api/'):
+        init_data_str = request.headers.get('X-Telegram-Init-Data')
+        if not init_data_str:
+            return jsonify({"error": "Unauthorized: Missing InitData"}), 401
+        user_data = validate_init_data(init_data_str)
+        if not user_data:
+            return jsonify({"error": "Unauthorized: Invalid InitData"}), 401
+        request.user_data = user_data
+
+
+# --- API Эндпоинты ---
+@app.route('/api/status', methods=['POST'])
+def get_user_status():
+    user_data = request.user_data
+    telegram_id = user_data['id']
+    user = User.query.filter_by(telegram_id=telegram_id).first()
+    
+    if user:
+        invite_codes = [ic.code for ic in InviteCode.query.filter_by(owner_id=user.id, is_used=False).all()]
+        return jsonify({
+            "is_new_user": False,
+            "points": user.points,
+            "has_completed_genesis": user.has_completed_genesis,
+            "invite_codes": invite_codes
+        })
+
+    invite_code = request.json.get('invite_code')
+    if not invite_code:
+        return jsonify({"error": "Invite code required for new users"}), 400
+
+    if invite_code == MASTER_INVITE_CODE:
+        inviter = None
+    else:
+        invite = InviteCode.query.filter_by(code=invite_code, is_used=False).first()
+        if not invite:
+            return jsonify({"error": "Invalid or already used invite code"}), 403
+        inviter = User.query.get(invite.owner_id)
+        
+    new_user = User(
+        telegram_id=telegram_id,
+        first_name=user_data.get('first_name'),
+        username=user_data.get('username'),
+        points=1000,
+        invited_by_id=inviter.id if inviter else None
+    )
+    db.session.add(new_user)
+    
+    if inviter:
+        invite.is_used = True
+        invite.used_by_id = new_user.id
+
+    db.session.commit()
+
+    return jsonify({
+        "is_new_user": True,
+        "points": new_user.points,
+        "has_completed_genesis": False,
+        "invite_codes": []
+    })
+
+
+@app.route('/api/genesis_questions', methods=['GET'])
+def get_genesis_questions():
     try:
         with open('questions.json', 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except Exception as e:
-        logging.error(f"Критическая ошибка при чтении questions.json: {e}")
-        return []
-
-GENESIS_QUESTIONS = load_questions_from_file()
-
-# --- НАСТРОЙКА БАЗЫ ДАННЫХ И ТАБЛИЦ ---
-database = None
-metadata = sqlalchemy.MetaData()
-
-if DATABASE_URL:
-    database = databases.Database(DATABASE_URL)
-else:
-    logging.critical("Критическая ошибка: Переменная DATABASE_URL не установлена!")
-
-users = sqlalchemy.Table(
-    "users", metadata,
-    sqlalchemy.Column("id", UUID(as_uuid=True), primary_key=True, default=uuid.uuid4),
-    sqlalchemy.Column("telegram_id", sqlalchemy.BigInteger, unique=True, nullable=False),
-    sqlalchemy.Column("username", sqlalchemy.String, nullable=True),
-    sqlalchemy.Column("first_name", sqlalchemy.String, nullable=True),
-    sqlalchemy.Column("points", sqlalchemy.BigInteger, default=0, nullable=False),
-    sqlalchemy.Column("invited_by_id", UUID(as_uuid=True), sqlalchemy.ForeignKey("users.id"), nullable=True),
-    sqlalchemy.Column("has_completed_genesis", sqlalchemy.Boolean, default=False, nullable=False),
-    sqlalchemy.Column("is_searchable", sqlalchemy.Boolean, default=True, nullable=False),
-    sqlalchemy.Column("airdrop_multiplier", sqlalchemy.Float, default=1.0, nullable=False),
-    sqlalchemy.Column("created_at", sqlalchemy.DateTime, server_default=sqlalchemy.func.now()),
-)
-
-invite_codes = sqlalchemy.Table(
-    "invite_codes", metadata,
-    sqlalchemy.Column("id", sqlalchemy.Integer, primary_key=True, autoincrement=True),
-    sqlalchemy.Column("code", sqlalchemy.String, unique=True, nullable=False),
-    sqlalchemy.Column("owner_id", UUID(as_uuid=True), sqlalchemy.ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
-    sqlalchemy.Column("is_used", sqlalchemy.Boolean, default=False, nullable=False),
-    sqlalchemy.Column("used_by_id", UUID(as_uuid=True), sqlalchemy.ForeignKey("users.id"), nullable=True),
-)
-
-questions = sqlalchemy.Table("questions", metadata, sqlalchemy.Column("id", sqlalchemy.Integer, primary_key=True, autoincrement=False), sqlalchemy.Column("text", sqlalchemy.String), sqlalchemy.Column("category", sqlalchemy.String), sqlalchemy.Column("options", sqlalchemy.JSON))
-answers = sqlalchemy.Table("answers", metadata, sqlalchemy.Column("id", sqlalchemy.Integer, primary_key=True, autoincrement=True), sqlalchemy.Column("user_id", UUID), sqlalchemy.Column("question_id", sqlalchemy.Integer), sqlalchemy.Column("answer_text", sqlalchemy.String))
+            questions = json.load(f)
+        return jsonify(questions)
+    except FileNotFoundError:
+        return jsonify({"error": "questions.json not found"}), 500
 
 
-# --- ХЕЛПЕРЫ ---
-def generate_invite_code(): return secrets.token_hex(4).upper()
-def get_multiplier_for_user(user_count):
-    if user_count < 100: return 10.0
-    if user_count < 1000: return 5.0
-    if user_count < 10000: return 2.0
-    if user_count < 100000: return 1.0
-    return 0.2
+@app.route('/api/submit_answers', methods=['POST'])
+def submit_answers():
+    user_data = request.user_data
+    telegram_id = user_data['id']
+    user = User.query.filter_by(telegram_id=telegram_id).first()
 
-# --- MIDDLEWARE ДЛЯ УПРАВЛЕНИЯ ПОДКЛЮЧЕНИЕМ К БД ---
-@web.middleware
-async def db_connection_middleware(request, handler):
-    if not isinstance(database, databases.Database): return await handler(request)
-    if not database.is_connected:
-        try:
-            await database.connect()
-        except Exception as e:
-            logging.error(f"Не удалось переподключиться к БД: {e}")
-            return web.json_response({'error': 'Сервис временно недоступен'}, status=503)
-    return await handler(request)
-
-# --- ОБРАБОТЧИКИ ЗАПРОСОВ (API) ---
-
-async def get_user_status(request):
-    try:
-        telegram_id = int(request.query['telegram_id'])
-        query = users.select().where(users.c.telegram_id == telegram_id)
-        user = await database.fetch_one(query)
-        if user:
-            invites_query = invite_codes.select().where(invite_codes.c.owner_id == user['id'], invite_codes.c.is_used == False)
-            user_invites = await database.fetch_all(invites_query)
-            return web.json_response({'status': 'registered', 'user_id': str(user['id']), 'points': user['points'], 'has_completed_genesis': user['has_completed_genesis'], 'is_searchable': user['is_searchable'], 'invites': [i['code'] for i in user_invites]})
-        else:
-            return web.json_response({'status': 'not_registered'}, status=404)
-    except Exception as e:
-        logging.error(f"API Ошибка в get_user_status: {e}")
-        return web.json_response({'error': 'Ошибка сервера'}, status=500)
-
-async def register_user(request):
-    try:
-        data = await request.json()
-        telegram_id, inviter_code = data['telegram_id'], data.get('invite_code')
-        if await database.fetch_one(users.select().where(users.c.telegram_id == telegram_id)):
-            return web.json_response({'error': 'Пользователь уже зарегистрирован'}, status=409)
-        async with database.transaction():
-            user_count = await database.fetch_val(sqlalchemy.select(sqlalchemy.func.count(users.c.id)))
-            inviter_id = None
-            if user_count == 0:
-                if not inviter_code or inviter_code.upper() != MASTER_INVITE_CODE: return web.json_response({'error': 'Неверный мастер-код'}, status=403)
-            else:
-                if not inviter_code: return web.json_response({'error': 'Требуется приглашение'}, status=403)
-                invite = await database.fetch_one(invite_codes.select().where(invite_codes.c.code == inviter_code.upper()))
-                if not invite or invite['is_used']: return web.json_response({'error': 'Код недействителен'}, status=403)
-                inviter_id = invite['owner_id']
-            new_user_id = uuid.uuid4()
-            await database.execute(users.insert().values(
-                id=new_user_id, telegram_id=telegram_id, username=data.get('username'), 
-                first_name=data.get('first_name'), points=1000, invited_by_id=inviter_id,
-                airdrop_multiplier=get_multiplier_for_user(user_count),
-                is_searchable=True, has_completed_genesis=False # ИСПРАВЛЕНИЕ: Добавлены недостающие поля
-            ))
-            new_invites = [{"code": generate_invite_code(), "owner_id": new_user_id, "is_used": False} for _ in range(5)]
-            await database.execute_many(query=invite_codes.insert(), values=new_invites)
-            if inviter_id:
-                await database.execute(invite_codes.update().where(invite_codes.c.code == inviter_code.upper()).values(is_used=True, used_by_id=new_user_id))
-        return web.json_response({'status': 'success'}, status=201)
-    except Exception as e:
-        logging.error(f"API Ошибка в register_user: {e}")
-        return web.json_response({'error': 'Ошибка при записи в БД'}, status=500)
-
-async def get_genesis_questions(request):
-    try:
-        count = await database.fetch_val(query=sqlalchemy.select(sqlalchemy.func.count(questions.c.id)))
-        if count == 0 and GENESIS_QUESTIONS:
-            questions_to_insert = [{"id": q["id"], "text": q["text"], "category": q["category"], "options": q.get("options")} for q in GENESIS_QUESTIONS]
-            await database.execute_many(query=questions.insert(), values=questions_to_insert)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
         
-        questions_from_db = await database.fetch_all(questions.select())
-        response_data = [{"id": q["id"], "text": q["text"], "category": q["category"], "options": q["options"]} for q in questions_from_db]
-        return web.json_response(response_data)
-    except Exception as e:
-        logging.error(f"Ошибка при получении вопросов: {e}")
-        return web.json_response({'error': 'Не удалось подготовить вопросы'}, status=500)
+    if user.has_completed_genesis:
+        return jsonify({"error": "Genesis profile already completed"}), 400
 
-async def submit_answers(request):
-    try:
-        data = await request.json()
-        user_id = uuid.UUID(data.get('user_id'))
-        async with database.transaction():
-            current_user = await database.fetch_one(users.select().where(users.c.id == user_id))
-            if not current_user or current_user['has_completed_genesis']: return web.json_response({'error': 'Действие недоступно'}, status=403)
-            await database.execute_many(query=answers.insert(), values=[{"user_id": user_id, "question_id": int(q_id), "answer_text": ans} for q_id, ans in data.get('answers', {}).items()])
-            points_for_genesis = 60000 * current_user['airdrop_multiplier']
-            await database.execute(users.update().where(users.c.id == user_id).values(points=users.c.points + points_for_genesis, has_completed_genesis=True))
-            if current_user['invited_by_id']:
-                inviter = await database.fetch_one(users.select().where(users.c.id == current_user['invited_by_id']))
-                if inviter:
-                    referral_bonus = (20000 + (60000 * 0.15)) * inviter['airdrop_multiplier']
-                    await database.execute(users.update().where(users.c.id == inviter['id']).values(points=users.c.points + referral_bonus))
-        return web.json_response({'status': 'success'})
-    except Exception as e:
-        logging.error(f"Ошибка в submit_answers: {e}")
-        return web.json_response({'error': 'Ошибка на сервере'}, status=500)
+    answers = request.json.get('answers')
+    if not answers or not isinstance(answers, list):
+        return jsonify({"error": "Invalid answers format"}), 400
+        
+    # --- НАЧАЛО ИЗМЕНЕНИЙ ---
+    # Сохраняем ответы в базу данных
+    for answer_data in answers:
+        new_answer = GenesisAnswer(
+            user_id=user.id,
+            question_id=answer_data.get('question_id'),
+            answer_text=answer_data.get('answer')
+        )
+        db.session.add(new_answer)
+    # --- КОНЕЦ ИЗМЕНЕНИЙ ---
 
-async def update_user_settings(request):
-    try:
-        data = await request.json()
-        user_id = uuid.UUID(data.get('user_id'))
-        is_searchable = data.get('is_searchable')
-        if is_searchable is None: return web.json_response({'error': 'Отсутствуют параметры'}, status=400)
-        await database.execute(users.update().where(users.c.id == user_id).values(is_searchable=is_searchable))
-        return web.json_response({'status': 'success'})
-    except Exception as e:
-        logging.error(f"Ошибка в update_user_settings: {e}")
-        return web.json_response({'error': 'Ошибка на сервере'}, status=500)
+    user.points += 60000
+    user.has_completed_genesis = True
+    
+    if user.invited_by_id:
+        inviter = User.query.get(user.invited_by_id)
+        if inviter:
+            inviter.points += 20000
 
-async def delete_user(request):
-    try:
-        data = await request.json()
-        user_id = uuid.UUID(data.get('user_id'))
-        await database.execute(users.delete().where(users.c.id == user_id))
-        return web.json_response({'status': 'success'})
-    except Exception as e:
-        logging.error(f"Ошибка в delete_user: {e}")
-        return web.json_response({'error': 'Ошибка на сервере'}, status=500)
+    new_invites = []
+    for _ in range(5):
+        new_code_str = f'FDT-{uuid.uuid4().hex[:6].upper()}'
+        new_invite = InviteCode(code=new_code_str, owner_id=user.id)
+        db.session.add(new_invite)
+        new_invites.append(new_code_str)
 
-async def get_user_count(request):
-    try:
-        count = await database.fetch_val(query=sqlalchemy.select(sqlalchemy.func.count(users.c.id)))
-        return web.json_response({'count': count})
-    except Exception as e:
-        logging.error(f"Ошибка в get_user_count: {e}")
-        return web.json_response({'error': 'Ошибка на сервере'}, status=500)
+    db.session.commit()
 
-async def handle_index(request):
-    try:
-        with open('./index.html', 'r', encoding='utf-8') as f: return web.Response(text=f.read(), content_type='text/html')
-    except FileNotFoundError: return web.Response(text="404: Not Found", status=404)
+    return jsonify({
+        "message": "Profile completed successfully!",
+        "new_points_balance": user.points,
+        "new_invite_codes": new_invites
+    })
 
-# --- УПРАВЛЕНИЕ ЖИЗНЕННЫМ ЦИКЛОМ ПРИЛОЖЕНИЯ ---
-async def on_startup(app):
-    if database:
-        try:
-            await database.connect()
-            engine = sqlalchemy.create_engine(DATABASE_URL)
-            metadata.create_all(engine)
-            logging.info("Первичное подключение к базе данных установлено.")
-        except Exception as e:
-            logging.critical(f"Не удалось подключиться к БД при старте: {e}")
+# --- Главная страница ---
+@app.route('/')
+def index():
+    return app.send_static_file('index.html')
 
-async def on_shutdown(app):
-    if database and database.is_connected:
-        await database.disconnect()
-        logging.info("Подключение к базе данных закрыто.")
-
-# --- СБОРКА И ЗАПУСК ПРИЛОЖЕНИЯ ---
-app = web.Application(middlewares=[db_connection_middleware])
-app.router.add_get('/', handle_index)
-app.router.add_get('/api/user/status', get_user_status)
-app.router.add_post('/api/register', register_user)
-app.router.add_get('/api/genesis_questions', get_genesis_questions)
-app.router.add_post('/api/submit_answers', submit_answers)
-app.router.add_post('/api/user/settings', update_user_settings)
-app.router.add_post('/api/user/delete', delete_user)
-app.router.add_get('/api/user_count', get_user_count)
-
-app.on_startup.append(on_startup)
-app.on_shutdown.append(on_shutdown)
-
-if __name__ == "__main__":
-    web.run_app(app, port=int(os.getenv("PORT", 8080)), host='0.0.0.0')
+if __name__ == '__main__':
+    with app.app_context():
+        db.create_all()
+    app.run(host='0.0.0.0', port=5000)
