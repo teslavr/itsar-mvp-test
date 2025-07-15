@@ -1,241 +1,299 @@
-<!-- ВЕРСИЯ 65: Полностью исправлена верстка и логика анкеты -->
 <!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Feudāta Founders' Circle</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Feudāta</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=Inter:wght@400;500;600;700&display=swap');
-        body { font-family: 'Inter', sans-serif; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
-        .logo-font { font-family: 'Cinzel', serif; }
-        .container { display: none; }
-        .container.visible { display: block; }
-        
-        /* ИСПРАВЛЕНИЕ ВЕРСТКИ: Стили для кнопок-ответов */
-        .option-button {
-            background-color: #374151; /* gray-700 */
-            border: 1px solid #4B5563; /* gray-600 */
-            color: #D1D5DB; /* gray-300 */
-            width: 100%;
+        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@700&family=Inter:wght@400;600&display=swap');
+
+        :root {
+            --bg-color: #12141C;
+            --text-color: #EAEBF0;
+            --primary-color: #D4AF37;
+            --button-bg: #1A1D29;
+            --button-border: #2D3142;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
             text-align: center;
-            padding: 12px;
+            -webkit-font-smoothing: antialiased;
+            box-sizing: border-box;
+        }
+
+        #app {
+            width: 100%;
+            max-width: 400px;
+        }
+        
+        .logo {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 48px;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+
+        .screen { display: none; }
+        .screen.active { display: block; }
+
+        h2 { font-size: 20px; font-weight: 600; margin-bottom: 24px; }
+        p { font-size: 14px; line-height: 1.5; }
+        
+        .question-container { margin-bottom: 30px; }
+        
+        .options-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 12px;
+        }
+
+        .option-button {
+            background-color: var(--button-bg);
+            border: 1px solid var(--button-border);
+            color: var(--text-color);
+            padding: 16px;
             border-radius: 12px;
             font-size: 16px;
             cursor: pointer;
-            transition: all 0.2s ease-in-out;
+            width: 100%;
+            text-align: left;
+            transition: background-color 0.2s, border-color 0.2s;
         }
         .option-button:hover {
-            background-color: #4B5563; /* gray-600 */
+            background-color: var(--button-border);
         }
-        .option-button.selected {
-            background-color: #2563EB; /* blue-600 */
-            border-color: #3B82F6; /* blue-500 */
-            color: white;
-            transform: scale(1.02);
-            box-shadow: 0 0 15px rgba(59, 130, 246, 0.5);
+
+        .input-field {
+            width: 100%;
+            padding: 16px;
+            background-color: var(--button-bg);
+            border: 1px solid var(--button-border);
+            border-radius: 12px;
+            color: var(--text-color);
+            font-size: 16px;
+            box-sizing: border-box;
         }
+
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            border-top-color: var(--text-color);
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
     </style>
 </head>
-<body class="bg-gray-900 text-gray-200 flex flex-col items-center justify-start pt-10 min-h-screen p-4">
+<body>
 
-    <div class="w-full max-w-md mx-auto">
-
-        <!-- Экран загрузки -->
-        <div id="loading-screen" class="container visible text-center">
-            <div class="flex items-end justify-center gap-x-2 mb-4"><h1 class="logo-font text-5xl font-bold text-white tracking-wider">Feudāta</h1><img src="https://i.imgur.com/YrnQETI.jpeg" alt="Иконка" class="h-12 w-12 rounded-full mb-1"></div>
-            <p class="text-gray-400">Проверка вашего статуса...</p>
-        </div>
-
-        <!-- Экран регистрации -->
-        <div id="register-screen" class="container bg-gray-800 p-8 rounded-2xl shadow-lg">
-            <div class="flex items-end justify-center gap-x-2 mb-4"><h1 class="logo-font text-4xl font-bold text-white tracking-wider">Feudāta</h1><img src="https://i.imgur.com/YrnQETI.jpeg" alt="Иконка" class="h-10 w-10 rounded-full mb-1"></div>
-            <h2 class="text-2xl font-semibold text-white mb-2">Вступить в Клуб</h2>
-            <p class="text-gray-400 mb-6">Пожалуйста, введите ваш код-приглашение.</p>
-            <input type="text" id="invite-code-input" class="w-full bg-gray-700 border border-gray-600 rounded-lg py-3 px-4 text-white text-center text-lg tracking-widest font-mono uppercase placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4" placeholder="КОД">
-            <button class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition active:scale-95" id="register-button">Подтвердить</button>
-        </div>
-        
-        <!-- Главный экран -->
-        <div id="main-screen" class="container">
-            <div class="flex justify-between items-center w-full mb-8">
-                <div class="flex items-end justify-center gap-x-2"><h1 class="logo-font text-4xl font-bold text-white tracking-wider">Feudāta</h1><img src="https://i.imgur.com/YrnQETI.jpeg" alt="Иконка" class="h-10 w-10 rounded-full mb-1"></div>
-                <button id="settings-button" class="text-gray-500 hover:text-white transition-colors"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></button>
-            </div>
-            <div class="bg-gray-800 p-6 rounded-2xl shadow-lg w-full">
-                <h2 class="text-lg font-semibold text-white mb-2" id="welcome-title"></h2>
-                <p class="text-gray-400 mb-6" id="user-info-text"></p>
-                <button class="button w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600" id="start-questionnaire-button">Пройти Генезис-Профиль</button>
-            </div>
-        </div>
-        
-        <div id="questionnaire-screen" class="container bg-gray-800 p-8 rounded-2xl shadow-lg">
-            <div class="flex items-end justify-center gap-x-2 mb-4"><h1 class="logo-font text-4xl font-bold text-white tracking-wider">Feudāta</h1><img src="https://i.imgur.com/YrnQETI.jpeg" alt="Иконка" class="h-10 w-10 rounded-full mb-1"></div>
-            <p id="progress-text" class="text-gray-400 mb-2"></p>
-            <h2 id="question-text" class="text-2xl font-semibold text-white mb-6"></h2>
-            <div id="options-container" class="space-y-3"></div>
-            <button id="next-question-button" class="button w-full mt-6 bg-gray-600 cursor-not-allowed" disabled>Далее</button>
-        </div>
-
-        <div id="error-screen" class="container bg-gray-800 p-8 rounded-2xl shadow-lg">
-            <h1 class="logo text-4xl font-bold text-white tracking-tighter mb-4">Feudāta</h1>
-            <h2 class="text-2xl font-semibold text-red-500 mb-2">Доступ Ограничен</h2>
-            <p class="text-gray-400" id="error-text"></p>
-        </div>
+<div id="app">
+    <div id="loading-screen" class="screen active">
+        <h1 class="logo">FEUDĀTA</h1>
+        <p>Проверка вашего статуса...</p>
+        <div class="spinner"></div>
     </div>
 
-    <script>
-        const tg = window.Telegram.WebApp;
-        let currentUserId = null;
-        let questions = [];
-        let currentQuestionIndex = 0;
-        let userAnswers = {};
+    <div id="welcome-screen" class="screen">
+        <h1 class="logo">FEUDĀTA</h1>
+        <h2>Добро пожаловать в Клуб Основателей</h2>
+        <p>Для доступа к платформе, пожалуйста, введите ваш инвайт-код.</p>
+        <input type="text" id="invite-code-input" class="input-field" placeholder="XXXX-XXXX" style="margin-top: 20px; text-transform: uppercase;">
+        <button id="submit-invite-button" class="option-button" style="margin-top: 12px; text-align: center;">Войти</button>
+        <p id="invite-error" style="color: #ff4d4d; display: none; margin-top: 10px;"></p>
+    </div>
 
-        const ui = {
-            screens: { loading: document.getElementById('loading-screen'), register: document.getElementById('register-screen'), main: document.getElementById('main-screen'), questionnaire: document.getElementById('questionnaire-screen'), error: document.getElementById('error-screen') },
-            buttons: { register: document.getElementById('register-button'), startQuestionnaire: document.getElementById('start-questionnaire-button'), nextQuestion: document.getElementById('next-question-button') },
-            text: { welcomeTitle: document.getElementById('welcome-title'), userInfo: document.getElementById('user-info-text'), error: document.getElementById('error-text'), progress: document.getElementById('progress-text'), question: document.getElementById('question-text') },
-            inputs: { inviteCode: document.getElementById('invite-code-input') },
-            containers: { options: document.getElementById('options-container') }
+    <div id="genesis-screen" class="screen">
+        <div id="question-container" class="question-container">
+            </div>
+    </div>
+
+    <div id="dashboard-screen" class="screen">
+        <h1 class="logo">FEUDĀTA</h1>
+        <h2>Ваш Профиль</h2>
+        <p>Очки: <b id="points-balance">0</b></p>
+        <p>Инвайт-коды:</p>
+        <div id="invite-codes-list"></div>
+        <button id="start-genesis-button" class="option-button" style="margin-top: 20px; text-align: center;">Пройти Генезис-Профиль</button>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const tg = window.Telegram.WebApp;
+    tg.expand();
+
+    const screens = {
+        loading: document.getElementById('loading-screen'),
+        welcome: document.getElementById('welcome-screen'),
+        genesis: document.getElementById('genesis-screen'),
+        dashboard: document.getElementById('dashboard-screen'),
+    };
+
+    const state = {
+        initData: tg.initData,
+        questions: [],
+        answers: [],
+        currentQuestionIndex: 0,
+        userStatus: null,
+    };
+
+    function showScreen(screenName) {
+        Object.values(screens).forEach(s => s.classList.remove('active'));
+        screens[screenName].classList.add('active');
+    }
+
+    async function apiCall(endpoint, method = 'GET', body = null) {
+        const headers = {
+            'Content-Type': 'application/json',
+            'X-Telegram-Init-Data': state.initData,
         };
-
-        function showScreen(screenName) {
-            Object.values(ui.screens).forEach(s => s.classList.remove('visible'));
-            ui.screens[screenName]?.classList.add('visible');
-        }
-        
-        function renderQuestion() {
-            const question = questions[currentQuestionIndex];
-            if (!question) return;
-            ui.text.question.textContent = question.text;
-            ui.text.progress.textContent = `Вопрос ${currentQuestionIndex + 1}/${questions.length}`;
-            ui.containers.options.innerHTML = '';
-            ui.buttons.nextQuestion.disabled = true;
-            ui.buttons.nextQuestion.classList.add('bg-gray-600', 'cursor-not-allowed');
-            ui.buttons.nextQuestion.classList.remove('bg-blue-600', 'hover:bg-blue-700');
-
-            question.options.forEach(optionText => {
-                const optionButton = document.createElement('button');
-                optionButton.textContent = optionText;
-                optionButton.className = 'option-button';
-                optionButton.onclick = () => {
-                    document.querySelectorAll('.option-button.selected').forEach(btn => btn.classList.remove('selected'));
-                    optionButton.classList.add('selected');
-                    userAnswers[question.id] = optionText;
-                    ui.buttons.nextQuestion.disabled = false;
-                    ui.buttons.nextQuestion.classList.remove('bg-gray-600', 'cursor-not-allowed');
-                    ui.buttons.nextQuestion.classList.add('bg-blue-600', 'hover:bg-blue-700');
-                };
-                ui.containers.options.appendChild(optionButton);
+        try {
+            const response = await fetch(endpoint, {
+                method,
+                headers,
+                body: body ? JSON.stringify(body) : null,
             });
-        }
-
-        async function startQuestionnaire() {
-            try {
-                showScreen('loading');
-                const response = await fetch('/api/genesis_questions');
-                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-                questions = await response.json();
-                if (questions && questions.length > 0) {
-                    currentQuestionIndex = 0; userAnswers = {};
-                    showScreen('questionnaire');
-                    renderQuestion();
-                } else {
-                    tg.showAlert('Вопросов пока нет. Зайдите позже!');
-                    showScreen('main');
-                }
-            } catch (e) {
-                tg.showAlert('Не удалось загрузить вопросы.', e.message);
-                showScreen('main');
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
             }
+            return await response.json();
+        } catch (error) {
+            console.error(`API call to ${endpoint} failed:`, error);
+            alert(`Ошибка: ${error.message}`);
+            return null;
+        }
+    }
+    
+    function renderQuestion() {
+        if (state.currentQuestionIndex >= state.questions.length) {
+            submitGenesisProfile();
+            return;
         }
 
-        async function nextQuestion() {
-            currentQuestionIndex++;
-            if (currentQuestionIndex < questions.length) {
-                renderQuestion();
-            } else {
-                showScreen('loading');
-                ui.screens.loading.querySelector('.text').textContent = 'Отправка ответов...';
-                await fetch('/api/submit_answers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: currentUserId, answers: userAnswers }) });
-                tg.showPopup({ title: 'Спасибо!', message: 'Ваши ответы сохранены. Мы начислили вам бонусные очки!', buttons: [{type: 'ok'}] });
-                setTimeout(() => main(), 1000);
-            }
-        }
-        
-        async function main() {
-            showScreen('loading');
-            tg.ready();
-            tg.expand();
-            tg.setHeaderColor('#171717');
+        const question = state.questions[state.currentQuestionIndex];
+        const container = document.getElementById('question-container');
+        container.innerHTML = `
+            <h2>${question.text} (${state.currentQuestionIndex + 1}/${state.questions.length})</h2>
+            <div class="options-grid">
+                ${question.options.map((opt, index) => `<button class="option-button" data-value="${opt}">${opt}</button>`).join('')}
+            </div>
+        `;
 
-            if (!tg.initDataUnsafe?.user?.id) { ui.text.error.textContent = "Не удалось идентифицировать вас."; showScreen('error'); return; }
-
-            const user = tg.initDataUnsafe.user;
-            const telegramId = user.id;
-            
-            try {
-                const response = await fetch(`/api/user/status?telegram_id=${telegramId}`);
-                if (response.status === 200) {
-                     const data = await response.json();
-                     currentUserId = data.user_id;
-                     ui.text.welcomeTitle.textContent = `Привет, ${user.first_name || 'Основатель'}!`;
-                     ui.text.userInfo.textContent = `Ваш баланс: ${data.points} Очков.`;
-                     if (data.has_completed_genesis) {
-                        ui.buttons.startQuestionnaire.textContent = 'Генезис-Профиль пройден ✓';
-                        ui.buttons.startQuestionnaire.disabled = true;
-                     } else {
-                        ui.buttons.startQuestionnaire.textContent = 'Пройти Генезис-Профиль';
-                        ui.buttons.startQuestionnaire.disabled = false;
-                     }
-                     showScreen('main');
-                } else if (response.status === 404) {
-                    showScreen('register');
-                } else {
-                     const errorData = await response.json();
-                     ui.text.error.textContent = `Ошибка сервера: ${errorData.error || response.statusText}`;
-                     showScreen('error');
-                }
-            } catch (error) {
-                 ui.text.error.textContent = `Ошибка сети.`;
-                 showScreen('error');
-            }
-        }
-
-        ui.buttons.register.addEventListener('click', async () => {
-            const registerButton = ui.buttons.register;
-            const inviteCode = ui.inputs.inviteCode.value.trim();
-            if (!inviteCode) { tg.showAlert('Пожалуйста, введите код-приглашение.'); return; }
-            registerButton.disabled = true;
-            registerButton.textContent = 'Проверка...';
-            const user = tg.initDataUnsafe.user;
-            try {
-                const response = await fetch('/api/register', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ telegram_id: user.id, username: user.username, first_name: user.first_name, invite_code: inviteCode })
+        container.querySelectorAll('.option-button').forEach(button => {
+            button.addEventListener('click', () => {
+                state.answers.push({
+                    question_id: question.id,
+                    answer: button.dataset.value
                 });
-                const data = await response.json();
-                if (response.status === 201) {
-                    tg.showPopup({ title: 'Успех!', message: 'Вы стали участником Клуба Основателей!', buttons: [{ type: 'ok' }] });
-                    setTimeout(() => window.location.reload(), 1500);
-                } else {
-                    tg.showAlert('Ошибка регистрации', data.error || 'Попробуйте позже.');
-                    registerButton.disabled = false;
-                    registerButton.textContent = 'Подтвердить';
-                }
-            } catch (error) {
-                tg.showAlert('Ошибка сети', 'Не удалось связаться с сервером.');
-                registerButton.disabled = false;
-                registerButton.textContent = 'Подтвердить';
-            }
+                state.currentQuestionIndex++;
+                renderQuestion();
+            });
         });
-        ui.buttons.startQuestionnaire.addEventListener('click', startQuestionnaire);
-        ui.buttons.nextQuestion.addEventListener('click', nextQuestion);
+    }
+
+    async function submitGenesisProfile() {
+        showScreen('loading'); // Показываем экран загрузки во время отправки
+        const result = await apiCall('/api/submit_answers', 'POST', { answers: state.answers });
+        if (result) {
+            alert('Профиль успешно заполнен! Вам начислены очки и выданы инвайт-коды.');
+            await checkUserStatus(); // Обновляем статус, чтобы показать новые данные
+        } else {
+             // Если ошибка, возвращаемся на дашборд
+            showScreen('dashboard');
+        }
+    }
+    
+    async function startGenesisProfile() {
+        showScreen('loading');
+        const questionsData = await apiCall('/api/genesis_questions');
+        if (questionsData) {
+            state.questions = questionsData;
+            state.answers = [];
+            state.currentQuestionIndex = 0;
+            showScreen('genesis');
+            renderQuestion();
+        } else {
+            showScreen('dashboard'); // Если не удалось загрузить вопросы, вернуть на дашборд
+        }
+    }
+
+    function updateDashboard() {
+        document.getElementById('points-balance').textContent = state.userStatus.points;
+        const codesContainer = document.getElementById('invite-codes-list');
+        codesContainer.innerHTML = '';
+        if (state.userStatus.invite_codes.length > 0) {
+            state.userStatus.invite_codes.forEach(code => {
+                const p = document.createElement('p');
+                p.textContent = code;
+                codesContainer.appendChild(p);
+            });
+        } else {
+            codesContainer.innerHTML = '<p>У вас пока нет инвайт-кодов.</p>';
+        }
+
+        const genesisButton = document.getElementById('start-genesis-button');
+        if (state.userStatus.has_completed_genesis) {
+            genesisButton.style.display = 'none';
+        } else {
+            genesisButton.style.display = 'block';
+            genesisButton.onclick = startGenesisProfile;
+        }
         
-        main();
-    </script>
+        showScreen('dashboard');
+    }
+
+    async function checkUserStatus(inviteCode = null) {
+        showScreen('loading');
+        const body = inviteCode ? { invite_code: inviteCode } : {};
+        const status = await apiCall('/api/status', 'POST', body);
+
+        if (status) {
+            state.userStatus = status;
+            if (status.error) {
+                 // Если сервер вернул ошибку, например "нужен инвайт"
+                showScreen('welcome');
+                if (inviteCode) { // Показываем ошибку только если была попытка ввода кода
+                    const errorEl = document.getElementById('invite-error');
+                    errorEl.textContent = status.error;
+                    errorEl.style.display = 'block';
+                }
+            } else {
+                updateDashboard();
+            }
+        } else {
+            // Если status is null, значит была сетевая ошибка или 500,
+            // в этом случае остаемся на экране приглашения
+            showScreen('welcome');
+            alert('Не удалось связаться с сервером. Попробуйте позже.');
+        }
+    }
+
+    document.getElementById('submit-invite-button').addEventListener('click', () => {
+        const inviteCode = document.getElementById('invite-code-input').value.trim();
+        if (inviteCode) {
+            document.getElementById('invite-error').style.display = 'none';
+            checkUserStatus(inviteCode);
+        }
+    });
+
+    // --- Initial Load ---
+    checkUserStatus();
+});
+</script>
+
 </body>
 </html>
