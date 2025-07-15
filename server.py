@@ -9,9 +9,8 @@ from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.dialects.postgresql import UUID
 
-
 # --- Конфигурация ---
-app = Flask(__name__)
+app = Flask(__name__, static_folder='static')
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'postgresql://user:password@localhost/feudata')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
@@ -19,7 +18,7 @@ db = SQLAlchemy(app)
 BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
 MASTER_INVITE_CODE = os.environ.get('MASTER_INVITE_CODE', 'FEUDATA-GENESIS-1')
 
-# --- Модели Базы Данных ---
+# ... (модели User, InviteCode, GenesisAnswer остаются без изменений) ...
 class User(db.Model):
     __tablename__ = 'users'
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -46,45 +45,71 @@ class InviteCode(db.Model):
     owner = db.relationship('User', backref='owned_invite_codes', foreign_keys=[owner_id])
     used_by = db.relationship('User', backref='used_invite_code', foreign_keys=[used_by_id])
 
-# НОВАЯ МОДЕЛЬ ДЛЯ ХРАНЕНИЯ ОТВЕТОВ
 class GenesisAnswer(db.Model):
     __tablename__ = 'genesis_answers'
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(UUID(as_uuid=True), db.ForeignKey('users.id'), nullable=False)
-    question_id = db.Column(db.String, nullable=False) # ID вопроса из questions.json
-    answer_text = db.Column(db.String, nullable=False) # Текст ответа
+    question_id = db.Column(db.String, nullable=False)
+    answer_text = db.Column(db.String, nullable=False)
     submitted_at = db.Column(db.TIMESTAMP, server_default=db.func.now())
     
     user = db.relationship('User', backref='genesis_answers')
 
 
-# --- Логика Валидации Telegram ---
+# --- Логика Валидации Telegram (С ОТЛАДКОЙ) ---
 def validate_init_data(init_data_str):
+    print("--- STARTING InitData VALIDATION ---")
+    
     if not BOT_TOKEN:
-        print("Warning: TELEGRAM_BOT_TOKEN is not set. Skipping validation.")
-        try:
-            params = dict(p.split('=') for p in init_data_str.split('&'))
-            user_data = json.loads(unquote(params['user']))
-            return user_data
-        except:
-            return None
+        print("!!! ERROR: TELEGRAM_BOT_TOKEN environment variable is NOT SET.")
+        return None
+    
+    # Выводим часть токена для проверки, что он вообще есть
+    print(f"--> Found Bot Token: ...{BOT_TOKEN[-6:]}")
+    print(f"--> Received initData string: {init_data_str}")
 
     try:
-        params = sorted([p.split('=') for p in init_data_str.split('&') if p.startswith('hash=') is False])
-        data_check_string = "\n".join([f"{k}={v}" for k, v in params])
-        received_hash = dict(p.split('=') for p in init_data_str.split('&'))['hash']
+        # Разбираем строку на параметры
+        params = {k: v for k, v in [p.split('=') for p in init_data_str.split('&')]}
+        
+        # Хэш, который прислал Telegram
+        received_hash = params.pop('hash', None)
+        if not received_hash:
+            print("!!! ERROR: Hash not found in initData")
+            return None
+
+        # Формируем строку для проверки из остальных параметров
+        data_check_string_parts = []
+        for key in sorted(params.keys()):
+            data_check_string_parts.append(f"{key}={params[key]}")
+        
+        data_check_string = "\n".join(data_check_string_parts)
+        print(f"--> String for hash check:\n{data_check_string}")
+        
+        # Считаем наш хэш
         secret_key = hmac.new("WebAppData".encode(), BOT_TOKEN.encode(), hashlib.sha256).digest()
         calculated_hash = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
 
+        print(f"--> Received hash:   {received_hash}")
+        print(f"--> Calculated hash: {calculated_hash}")
+
+        # Сравниваем хэши
         if calculated_hash == received_hash:
-            user_param = dict(p.split('=') for p in init_data_str.split('&'))['user']
+            print("--- VALIDATION SUCCESSFUL ---")
+            user_param = params.get('user')
             return json.loads(unquote(user_param))
-        return None
+        else:
+            print("!!! ERROR: Hashes DO NOT MATCH.")
+            print("--- VALIDATION FAILED ---")
+            return None
+            
     except Exception as e:
-        print(f"Validation error: {e}")
+        print(f"!!! CRITICAL ERROR during validation: {e}")
+        print("--- VALIDATION FAILED ---")
         return None
 
-# --- Middleware для защиты роутов ---
+# ... (остальной код остается без изменений) ...
+
 @app.before_request
 def before_request_func():
     if request.path == '/' or request.path.startswith('/static'):
@@ -98,8 +123,6 @@ def before_request_func():
             return jsonify({"error": "Unauthorized: Invalid InitData"}), 401
         request.user_data = user_data
 
-
-# --- API Эндпоинты ---
 @app.route('/api/status', methods=['POST'])
 def get_user_status():
     user_data = request.user_data
@@ -149,7 +172,6 @@ def get_user_status():
         "invite_codes": []
     })
 
-
 @app.route('/api/genesis_questions', methods=['GET'])
 def get_genesis_questions():
     try:
@@ -158,7 +180,6 @@ def get_genesis_questions():
         return jsonify(questions)
     except FileNotFoundError:
         return jsonify({"error": "questions.json not found"}), 500
-
 
 @app.route('/api/submit_answers', methods=['POST'])
 def submit_answers():
@@ -176,8 +197,6 @@ def submit_answers():
     if not answers or not isinstance(answers, list):
         return jsonify({"error": "Invalid answers format"}), 400
         
-    # --- НАЧАЛО ИЗМЕНЕНИЙ ---
-    # Сохраняем ответы в базу данных
     for answer_data in answers:
         new_answer = GenesisAnswer(
             user_id=user.id,
@@ -185,7 +204,6 @@ def submit_answers():
             answer_text=answer_data.get('answer')
         )
         db.session.add(new_answer)
-    # --- КОНЕЦ ИЗМЕНЕНИЙ ---
 
     user.points += 60000
     user.has_completed_genesis = True
@@ -210,7 +228,6 @@ def submit_answers():
         "new_invite_codes": new_invites
     })
 
-# --- Главная страница ---
 @app.route('/')
 def index():
     return app.send_static_file('index.html')
