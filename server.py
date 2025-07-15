@@ -18,7 +18,7 @@ db = SQLAlchemy(app)
 BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
 MASTER_INVITE_CODE = os.environ.get('MASTER_INVITE_CODE', 'FEUDATA-GENESIS-1')
 
-# ... (модели User, InviteCode, GenesisAnswer остаются без изменений) ...
+# --- Модели Базы Данных ---
 class User(db.Model):
     __tablename__ = 'users'
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -31,7 +31,6 @@ class User(db.Model):
     has_completed_genesis = db.Column(db.Boolean, default=False)
     is_searchable = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.TIMESTAMP, server_default=db.func.now())
-
     inviter = db.relationship('User', remote_side=[id], backref='referrals')
 
 class InviteCode(db.Model):
@@ -41,7 +40,6 @@ class InviteCode(db.Model):
     owner_id = db.Column(UUID(as_uuid=True), db.ForeignKey('users.id'), nullable=False)
     is_used = db.Column(db.Boolean, default=False)
     used_by_id = db.Column(UUID(as_uuid=True), db.ForeignKey('users.id'), nullable=True)
-
     owner = db.relationship('User', backref='owned_invite_codes', foreign_keys=[owner_id])
     used_by = db.relationship('User', backref='used_invite_code', foreign_keys=[used_by_id])
 
@@ -52,81 +50,72 @@ class GenesisAnswer(db.Model):
     question_id = db.Column(db.String, nullable=False)
     answer_text = db.Column(db.String, nullable=False)
     submitted_at = db.Column(db.TIMESTAMP, server_default=db.func.now())
-    
     user = db.relationship('User', backref='genesis_answers')
 
-
-# --- Логика Валидации Telegram (С ОТЛАДКОЙ) ---
+# --- Логика Валидации Telegram (ИСПРАВЛЕННАЯ) ---
 def validate_init_data(init_data_str):
-    print("--- STARTING InitData VALIDATION ---")
-    
     if not BOT_TOKEN:
-        print("!!! ERROR: TELEGRAM_BOT_TOKEN environment variable is NOT SET.")
         return None
-    
-    # Выводим часть токена для проверки, что он вообще есть
-    print(f"--> Found Bot Token: ...{BOT_TOKEN[-6:]}")
-    print(f"--> Received initData string: {init_data_str}")
 
     try:
-        # Разбираем строку на параметры
-        params = {k: v for k, v in [p.split('=') for p in init_data_str.split('&')]}
+        # Разбираем строку на пары ключ-значение
+        params = {k: v for k, v in [p.split('=', 1) for p in init_data_str.split('&')]}
         
         # Хэш, который прислал Telegram
         received_hash = params.pop('hash', None)
         if not received_hash:
-            print("!!! ERROR: Hash not found in initData")
             return None
 
-        # Формируем строку для проверки из остальных параметров
+        # Формируем строку для проверки, исключая 'hash' и 'signature'
         data_check_string_parts = []
+        # Важно: сортируем ключи для консистентности
         for key in sorted(params.keys()):
-            data_check_string_parts.append(f"{key}={params[key]}")
+            # Игнорируем 'signature', так как он не участвует в формировании хэша
+            if key != 'signature':
+                data_check_string_parts.append(f"{key}={params[key]}")
         
         data_check_string = "\n".join(data_check_string_parts)
-        print(f"--> String for hash check:\n{data_check_string}")
         
         # Считаем наш хэш
         secret_key = hmac.new("WebAppData".encode(), BOT_TOKEN.encode(), hashlib.sha256).digest()
         calculated_hash = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
 
-        print(f"--> Received hash:   {received_hash}")
-        print(f"--> Calculated hash: {calculated_hash}")
-
         # Сравниваем хэши
         if calculated_hash == received_hash:
-            print("--- VALIDATION SUCCESSFUL ---")
             user_param = params.get('user')
             return json.loads(unquote(user_param))
         else:
-            print("!!! ERROR: Hashes DO NOT MATCH.")
-            print("--- VALIDATION FAILED ---")
             return None
             
-    except Exception as e:
-        print(f"!!! CRITICAL ERROR during validation: {e}")
-        print("--- VALIDATION FAILED ---")
+    except Exception:
         return None
 
-# ... (остальной код остается без изменений) ...
-
+# --- Middleware для защиты роутов ---
 @app.before_request
 def before_request_func():
-    if request.path == '/' or request.path.startswith('/static'):
+    # Пропускаем статические файлы и главную страницу
+    if request.path == '/' or request.path.startswith('/static/'):
         return
+
+    # Защищаем все роуты /api/
     if request.path.startswith('/api/'):
         init_data_str = request.headers.get('X-Telegram-Init-Data')
         if not init_data_str:
             return jsonify({"error": "Unauthorized: Missing InitData"}), 401
+        
         user_data = validate_init_data(init_data_str)
         if not user_data:
             return jsonify({"error": "Unauthorized: Invalid InitData"}), 401
+        
+        # Сохраняем данные пользователя в контекст запроса
         request.user_data = user_data
 
+# --- API Эндпоинты ---
 @app.route('/api/status', methods=['POST'])
 def get_user_status():
     user_data = request.user_data
     telegram_id = user_data['id']
+    
     user = User.query.filter_by(telegram_id=telegram_id).first()
     
     if user:
@@ -138,6 +127,7 @@ def get_user_status():
             "invite_codes": invite_codes
         })
 
+    # Сценарий регистрации
     invite_code = request.json.get('invite_code')
     if not invite_code:
         return jsonify({"error": "Invite code required for new users"}), 400
@@ -160,6 +150,7 @@ def get_user_status():
     db.session.add(new_user)
     
     if inviter:
+        db.session.flush() # Получаем ID нового пользователя до коммита
         invite.is_used = True
         invite.used_by_id = new_user.id
 
@@ -228,6 +219,7 @@ def submit_answers():
         "new_invite_codes": new_invites
     })
 
+# --- Главная страница ---
 @app.route('/')
 def index():
     return app.send_static_file('index.html')
