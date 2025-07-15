@@ -1,4 +1,4 @@
-<!-- ВЕРСИЯ 64: Полностью исправлена верстка и логика анкеты -->
+<!-- ВЕРСИЯ 65: Полностью исправлена верстка и логика анкеты -->
 <!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -14,11 +14,17 @@
         .container { display: none; }
         .container.visible { display: block; }
         
-        /* Стили для кнопок-ответов */
+        /* ИСПРАВЛЕНИЕ ВЕРСТКИ: Стили для кнопок-ответов */
         .option-button {
             background-color: #374151; /* gray-700 */
             border: 1px solid #4B5563; /* gray-600 */
             color: #D1D5DB; /* gray-300 */
+            width: 100%;
+            text-align: center;
+            padding: 12px;
+            border-radius: 12px;
+            font-size: 16px;
+            cursor: pointer;
             transition: all 0.2s ease-in-out;
         }
         .option-button:hover {
@@ -29,6 +35,7 @@
             border-color: #3B82F6; /* blue-500 */
             color: white;
             transform: scale(1.02);
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.5);
         }
     </style>
 </head>
@@ -112,7 +119,7 @@
             question.options.forEach(optionText => {
                 const optionButton = document.createElement('button');
                 optionButton.textContent = optionText;
-                optionButton.className = 'button option-button';
+                optionButton.className = 'option-button';
                 optionButton.onclick = () => {
                     document.querySelectorAll('.option-button.selected').forEach(btn => btn.classList.remove('selected'));
                     optionButton.classList.add('selected');
