@@ -56,78 +56,59 @@ class GenesisAnswer(db.Model):
 def validate_init_data(init_data_str):
     if not BOT_TOKEN:
         return None
-
     try:
-        # Разбираем строку на пары ключ-значение
         params = {k: v for k, v in [p.split('=', 1) for p in init_data_str.split('&')]}
-        
-        # Хэш, который прислал Telegram
         received_hash = params.pop('hash', None)
-        if not received_hash:
-            return None
+        if not received_hash: return None
 
-        # Формируем строку для проверки, исключая 'hash' и 'signature'
         data_check_string_parts = []
-        # Важно: сортируем ключи для консистентности
         for key in sorted(params.keys()):
-            # Игнорируем 'signature', так как он не участвует в формировании хэша
             if key != 'signature':
                 data_check_string_parts.append(f"{key}={params[key]}")
         
         data_check_string = "\n".join(data_check_string_parts)
         
-        # Считаем наш хэш
         secret_key = hmac.new("WebAppData".encode(), BOT_TOKEN.encode(), hashlib.sha256).digest()
         calculated_hash = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
 
-        # Сравниваем хэши
         if calculated_hash == received_hash:
             user_param = params.get('user')
             return json.loads(unquote(user_param))
         else:
             return None
-            
     except Exception:
         return None
 
 # --- Middleware для защиты роутов ---
 @app.before_request
 def before_request_func():
-    # Пропускаем статические файлы и главную страницу
-    if request.path == '/' or request.path.startswith('/static/'):
+    if request.path == '/' or request.path.startswith('/static/') or request.path == '/version':
         return
-
-    # Защищаем все роуты /api/
     if request.path.startswith('/api/'):
         init_data_str = request.headers.get('X-Telegram-Init-Data')
         if not init_data_str:
             return jsonify({"error": "Unauthorized: Missing InitData"}), 401
-        
         user_data = validate_init_data(init_data_str)
         if not user_data:
             return jsonify({"error": "Unauthorized: Invalid InitData"}), 401
-        
-        # Сохраняем данные пользователя в контекст запроса
         request.user_data = user_data
+
+# --- НОВЫЙ ПРОВЕРОЧНЫЙ ЭНДПОИНТ ---
+@app.route('/version')
+def version():
+    return jsonify({"version": "1.1.0-final-fix"})
 
 # --- API Эндпоинты ---
 @app.route('/api/status', methods=['POST'])
 def get_user_status():
     user_data = request.user_data
     telegram_id = user_data['id']
-    
     user = User.query.filter_by(telegram_id=telegram_id).first()
     
     if user:
         invite_codes = [ic.code for ic in InviteCode.query.filter_by(owner_id=user.id, is_used=False).all()]
-        return jsonify({
-            "is_new_user": False,
-            "points": user.points,
-            "has_completed_genesis": user.has_completed_genesis,
-            "invite_codes": invite_codes
-        })
+        return jsonify({ "is_new_user": False, "points": user.points, "has_completed_genesis": user.has_completed_genesis, "invite_codes": invite_codes })
 
-    # Сценарий регистрации
     invite_code = request.json.get('invite_code')
     if not invite_code:
         return jsonify({"error": "Invite code required for new users"}), 400
@@ -136,32 +117,19 @@ def get_user_status():
         inviter = None
     else:
         invite = InviteCode.query.filter_by(code=invite_code, is_used=False).first()
-        if not invite:
-            return jsonify({"error": "Invalid or already used invite code"}), 403
+        if not invite: return jsonify({"error": "Invalid or already used invite code"}), 403
         inviter = User.query.get(invite.owner_id)
         
-    new_user = User(
-        telegram_id=telegram_id,
-        first_name=user_data.get('first_name'),
-        username=user_data.get('username'),
-        points=1000,
-        invited_by_id=inviter.id if inviter else None
-    )
+    new_user = User( telegram_id=telegram_id, first_name=user_data.get('first_name'), username=user_data.get('username'), points=1000, invited_by_id=inviter.id if inviter else None )
     db.session.add(new_user)
     
     if inviter:
-        db.session.flush() # Получаем ID нового пользователя до коммита
+        db.session.flush()
         invite.is_used = True
         invite.used_by_id = new_user.id
 
     db.session.commit()
-
-    return jsonify({
-        "is_new_user": True,
-        "points": new_user.points,
-        "has_completed_genesis": False,
-        "invite_codes": []
-    })
+    return jsonify({ "is_new_user": True, "points": new_user.points, "has_completed_genesis": False, "invite_codes": [] })
 
 @app.route('/api/genesis_questions', methods=['GET'])
 def get_genesis_questions():
@@ -178,22 +146,14 @@ def submit_answers():
     telegram_id = user_data['id']
     user = User.query.filter_by(telegram_id=telegram_id).first()
 
-    if not user:
-        return jsonify({"error": "User not found"}), 404
-        
-    if user.has_completed_genesis:
-        return jsonify({"error": "Genesis profile already completed"}), 400
+    if not user: return jsonify({"error": "User not found"}), 404
+    if user.has_completed_genesis: return jsonify({"error": "Genesis profile already completed"}), 400
 
     answers = request.json.get('answers')
-    if not answers or not isinstance(answers, list):
-        return jsonify({"error": "Invalid answers format"}), 400
+    if not answers or not isinstance(answers, list): return jsonify({"error": "Invalid answers format"}), 400
         
     for answer_data in answers:
-        new_answer = GenesisAnswer(
-            user_id=user.id,
-            question_id=answer_data.get('question_id'),
-            answer_text=answer_data.get('answer')
-        )
+        new_answer = GenesisAnswer( user_id=user.id, question_id=answer_data.get('question_id'), answer_text=answer_data.get('answer') )
         db.session.add(new_answer)
 
     user.points += 60000
@@ -201,8 +161,7 @@ def submit_answers():
     
     if user.invited_by_id:
         inviter = User.query.get(user.invited_by_id)
-        if inviter:
-            inviter.points += 20000
+        if inviter: inviter.points += 20000
 
     new_invites = []
     for _ in range(5):
@@ -212,12 +171,7 @@ def submit_answers():
         new_invites.append(new_code_str)
 
     db.session.commit()
-
-    return jsonify({
-        "message": "Profile completed successfully!",
-        "new_points_balance": user.points,
-        "new_invite_codes": new_invites
-    })
+    return jsonify({ "message": "Profile completed successfully!", "new_points_balance": user.points, "new_invite_codes": new_invites })
 
 # --- Главная страница ---
 @app.route('/')
