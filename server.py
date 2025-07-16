@@ -93,10 +93,14 @@ def before_request_func():
             return jsonify({"error": "Unauthorized: Invalid InitData"}), 401
         request.user_data = user_data
 
-# --- НОВЫЙ ПРОВЕРОЧНЫЙ ЭНДПОИНТ ---
+# --- ПРОВЕРОЧНЫЙ ЭНДПОИНТ ---
 @app.route('/version')
 def version():
-    return jsonify({"version": "1.1.0-final-fix"})
+    token_check = os.environ.get('TOKEN_CHECK', 'Token Check Not Set')
+    return jsonify({
+        "version": "1.2.0-token-check",
+        "token_check_suffix": f"...{token_check[-6:]}" if len(token_check) > 6 else token_check
+    })
 
 # --- API Эндпоинты ---
 @app.route('/api/status', methods=['POST'])
