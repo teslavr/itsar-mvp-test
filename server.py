@@ -8,8 +8,9 @@ import uuid
 from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.dialects.postgresql import UUID
-# ИСПРАВЛЕННЫЙ ИМПОРТ ИЗ БИБЛИОТЕКИ
-from init_data_py import validate, parse_init_data
+# ФИНАЛЬНЫЙ ИСПРАВЛЕННЫЙ ИМПОРТ ИЗ БИБЛИОТЕКИ
+from init_data_py.validator import validate
+from init_data_py.parser import parse_init_data
 
 # --- Конфигурация ---
 app = Flask(__name__, static_folder='static')
@@ -90,6 +91,7 @@ def before_request_func():
         request.user_data = user_data
 
 # --- API Эндпоинты ---
+# ... (остальной код без изменений) ...
 @app.route('/api/status', methods=['POST'])
 def get_user_status():
     user_data = request.user_data
@@ -163,6 +165,7 @@ def submit_answers():
 
     db.session.commit()
     return jsonify({ "message": "Profile completed successfully!", "new_points_balance": user.points, "new_invite_codes": new_invites })
+
 
 # --- Главная страница ---
 @app.route('/')
