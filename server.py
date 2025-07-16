@@ -8,8 +8,8 @@ import uuid
 from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.dialects.postgresql import UUID
-# Корректный импорт из библиотеки
-from init_data import validate, parse_init_data
+# ИСПРАВЛЕННЫЙ ИМПОРТ ИЗ БИБЛИОТЕКИ
+from init_data_py import validate, parse_init_data
 
 # --- Конфигурация ---
 app = Flask(__name__, static_folder='static')
@@ -60,14 +60,20 @@ def validate_init_data(init_data_str):
         return None
 
     try:
+        # lifetime=0 отключает проверку срока действия данных
         validate(init_data_str, BOT_TOKEN, 0)
+        
         parsed_data = parse_init_data(init_data_str)
-        return parsed_data.user.model_dump()
+        # Убедимся, что user не None и преобразуем в словарь
+        if parsed_data.user:
+            return parsed_data.user.model_dump()
+        return None
+        
     except Exception as e:
-        print(f"Validation failed: {e}")
+        print(f"Validation failed with exception: {e}")
         return None
 
-# --- Middleware ---
+# --- Middleware для защиты роутов ---
 @app.before_request
 def before_request_func():
     if request.path == '/' or request.path.startswith('/static/'):
@@ -158,6 +164,7 @@ def submit_answers():
     db.session.commit()
     return jsonify({ "message": "Profile completed successfully!", "new_points_balance": user.points, "new_invite_codes": new_invites })
 
+# --- Главная страница ---
 @app.route('/')
 def index():
     return app.send_static_file('index.html')
