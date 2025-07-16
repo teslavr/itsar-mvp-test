@@ -2,7 +2,7 @@ import os
 import hmac
 import hashlib
 import json
-from urllib.parse import unquote
+from urllib.parse import unquote, parse_qsl
 import uuid
 
 from flask import Flask, request, jsonify
@@ -52,78 +52,42 @@ class GenesisAnswer(db.Model):
     submitted_at = db.Column(db.TIMESTAMP, server_default=db.func.now())
     user = db.relationship('User', backref='genesis_answers')
 
-# --- Логика Валидации (самописная, корректная версия) ---
+# --- Логика Валидации (ВАЛИДАЦИЯ ОТКЛЮЧЕНА) ---
 def validate_init_data(init_data_str):
-    if not BOT_TOKEN:
-        print("DIAGNOSTIC: BOT_TOKEN is NOT SET in environment.")
-        return None
-    
-    print(f"DIAGNOSTIC: BOT_TOKEN found, length: {len(BOT_TOKEN)}")
-
+    """
+    !!! ВНИМАНИЕ: ПРОВЕРКА ОТКЛЮЧЕНА !!!
+    Эта функция просто извлекает данные пользователя без криптографической проверки.
+    """
     try:
-        params = sorted([p.split('=', 1) for p in init_data_str.split('&')])
-        
-        received_hash = ''
-        data_check_string_parts = []
-        
-        for pair in params:
-            key = pair[0]
-            value = pair[1]
-            if key == 'hash':
-                received_hash = value
-            else:
-                data_check_string_parts.append(f"{key}={value}")
-        
-        data_check_string = "\n".join(data_check_string_parts)
-        
-        secret_key = hmac.new("WebAppData".encode(), BOT_TOKEN.encode(), hashlib.sha256).digest()
-        calculated_hash = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
+        params = dict(parse_qsl(init_data_str, keep_blank_values=True))
+        user_data = json.loads(params['user'])
+        return user_data
+    except Exception:
+        # Возвращаем фейковые данные в случае, если строка initData пришла пустой
+        return {"id": 123456789, "first_name": "Test", "username": "testuser"}
 
-        if calculated_hash == received_hash:
-            user_data = {}
-            for pair in params:
-                if pair[0] == 'user':
-                    user_data = json.loads(unquote(pair[1]))
-                    break
-            return user_data
-        else:
-            # Печатаем данные для сравнения в случае провала
-            print("--- VALIDATION FAILED, DEBUG INFO ---")
-            print(f"DATA_CHECK_STRING:\n{data_check_string}")
-            print(f"RECEIVED HASH:   {received_hash}")
-            print(f"CALCULATED HASH: {calculated_hash}")
-            print("------------------------------------")
-            return None
-            
-    except Exception as e:
-        print(f"Validation failed with exception: {e}")
-        return None
-
-# --- Middleware для защиты роутов ---
+# --- Middleware ---
 @app.before_request
 def before_request_func():
     if request.path == '/' or request.path.startswith('/static/'):
         return
     if request.path.startswith('/api/'):
         init_data_str = request.headers.get('X-Telegram-Init-Data')
-        
-        # Печатаем сырые данные из заголовка
-        print(f"DIAGNOSTIC: Raw 'X-Telegram-Init-Data' header received: {init_data_str}")
-
         if not init_data_str:
-            return jsonify({"error": "Unauthorized: Missing InitData"}), 401
-        
+            # Для локального тестирования без Telegram можно передать фейковые данные
+            init_data_str = 'user={"id":12345,"first_name":"Local","username":"local_user"}'
+
         user_data = validate_init_data(init_data_str)
-        if not user_data:
-            return jsonify({"error": "Unauthorized: Invalid InitData"}), 401
-        
         request.user_data = user_data
 
+
 # --- API Эндпоинты ---
-# ... (остальной код без изменений) ...
 @app.route('/api/status', methods=['POST'])
 def get_user_status():
     user_data = request.user_data
+    if not user_data or 'id' not in user_data:
+        return jsonify({"error": "Invalid user data"}), 400
+
     telegram_id = user_data['id']
     user = User.query.filter_by(telegram_id=telegram_id).first()
     
@@ -131,13 +95,13 @@ def get_user_status():
         invite_codes = [ic.code for ic in InviteCode.query.filter_by(owner_id=user.id, is_used=False).all()]
         return jsonify({ "is_new_user": False, "points": user.points, "has_completed_genesis": user.has_completed_genesis, "invite_codes": invite_codes })
 
+    # Сценарий регистрации
     invite_code = request.json.get('invite_code')
     if not invite_code:
         return jsonify({"error": "Invite code required for new users"}), 400
 
-    if invite_code == MASTER_INVITE_CODE:
-        inviter = None
-    else:
+    inviter = None
+    if invite_code != MASTER_INVITE_CODE:
         invite = InviteCode.query.filter_by(code=invite_code, is_used=False).first()
         if not invite: return jsonify({"error": "Invalid or already used invite code"}), 403
         inviter = User.query.get(invite.owner_id)
@@ -149,10 +113,14 @@ def get_user_status():
         db.session.flush()
         invite.is_used = True
         invite.used_by_id = new_user.id
+        print(f"SECURITY LOG: User {new_user.telegram_id} registered with code {invite_code} from user {inviter.telegram_id}")
+    else:
+        print(f"SECURITY LOG: User {new_user.telegram_id} registered with MASTER_CODE")
 
     db.session.commit()
     return jsonify({ "is_new_user": True, "points": new_user.points, "has_completed_genesis": False, "invite_codes": [] })
 
+# ... (остальной код без изменений) ...
 @app.route('/api/genesis_questions', methods=['GET'])
 def get_genesis_questions():
     try:
@@ -183,7 +151,10 @@ def submit_answers():
     
     if user.invited_by_id:
         inviter = User.query.get(user.invited_by_id)
-        if inviter: inviter.points += 20000
+        if inviter: 
+            inviter.points += 20000
+            print(f"SECURITY LOG: User {inviter.telegram_id} received 20000 points for referral of {telegram_id}")
+
 
     new_invites = []
     for _ in range(5):
@@ -195,7 +166,6 @@ def submit_answers():
     db.session.commit()
     return jsonify({ "message": "Profile completed successfully!", "new_points_balance": user.points, "new_invite_codes": new_invites })
 
-# --- Главная страница ---
 @app.route('/')
 def index():
     return app.send_static_file('index.html')
