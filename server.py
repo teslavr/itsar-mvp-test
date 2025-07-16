@@ -55,10 +55,12 @@ class GenesisAnswer(db.Model):
 # --- Логика Валидации (самописная, корректная версия) ---
 def validate_init_data(init_data_str):
     if not BOT_TOKEN:
+        print("DIAGNOSTIC: BOT_TOKEN is NOT SET in environment.")
         return None
+    
+    print(f"DIAGNOSTIC: BOT_TOKEN found, length: {len(BOT_TOKEN)}")
 
     try:
-        # Разбираем строку на пары ключ-значение
         params = sorted([p.split('=', 1) for p in init_data_str.split('&')])
         
         received_hash = ''
@@ -78,7 +80,6 @@ def validate_init_data(init_data_str):
         calculated_hash = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
 
         if calculated_hash == received_hash:
-            # Находим параметр user в исходных данных для извлечения
             user_data = {}
             for pair in params:
                 if pair[0] == 'user':
@@ -86,6 +87,12 @@ def validate_init_data(init_data_str):
                     break
             return user_data
         else:
+            # Печатаем данные для сравнения в случае провала
+            print("--- VALIDATION FAILED, DEBUG INFO ---")
+            print(f"DATA_CHECK_STRING:\n{data_check_string}")
+            print(f"RECEIVED HASH:   {received_hash}")
+            print(f"CALCULATED HASH: {calculated_hash}")
+            print("------------------------------------")
             return None
             
     except Exception as e:
@@ -99,6 +106,10 @@ def before_request_func():
         return
     if request.path.startswith('/api/'):
         init_data_str = request.headers.get('X-Telegram-Init-Data')
+        
+        # Печатаем сырые данные из заголовка
+        print(f"DIAGNOSTIC: Raw 'X-Telegram-Init-Data' header received: {init_data_str}")
+
         if not init_data_str:
             return jsonify({"error": "Unauthorized: Missing InitData"}), 401
         
@@ -109,6 +120,7 @@ def before_request_func():
         request.user_data = user_data
 
 # --- API Эндпоинты ---
+# ... (остальной код без изменений) ...
 @app.route('/api/status', methods=['POST'])
 def get_user_status():
     user_data = request.user_data
