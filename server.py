@@ -8,7 +8,8 @@ import uuid
 from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.dialects.postgresql import UUID
-from init_data import InitData # <--- ИМПОРТ ИЗ НОВОЙ БИБЛИОТЕКИ
+# ИСПРАВЛЕННЫЙ ИМПОРТ ИЗ БИБЛИОТЕКИ
+from init_data import validate, parse_init_data
 
 # --- Конфигурация ---
 app = Flask(__name__, static_folder='static')
@@ -20,6 +21,7 @@ BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
 MASTER_INVITE_CODE = os.environ.get('MASTER_INVITE_CODE', 'FEUDATA-GENESIS-1')
 
 # --- Модели Базы Данных ---
+# ... (весь код моделей остается без изменений) ...
 class User(db.Model):
     __tablename__ = 'users'
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -53,22 +55,26 @@ class GenesisAnswer(db.Model):
     submitted_at = db.Column(db.TIMESTAMP, server_default=db.func.now())
     user = db.relationship('User', backref='genesis_answers')
 
-# --- Логика Валидации (с использованием библиотеки) ---
+
+# --- Логика Валидации (с использованием библиотеки - ИСПРАВЛЕННАЯ ВЕРСИЯ) ---
 def validate_init_data(init_data_str):
     if not BOT_TOKEN:
         return None
 
     try:
-        # Валидация с помощью библиотеки.
-        # lifetime=0 отключает проверку срока действия данных, что для нас приемлемо.
-        is_valid = InitData.validate(init_data_str, BOT_TOKEN, lifetime=0)
-        if is_valid:
-            # Парсим данные после успешной валидации
-            parsed_data = InitData.parse(init_data_str)
-            return parsed_data.user.dict()
-        else:
-            return None
-    except Exception:
+        # Библиотека `validate` выбрасывает исключение в случае ошибки,
+        # поэтому мы оборачиваем вызов в try-except.
+        # lifetime=0 отключает проверку срока давности данных.
+        validate(init_data_str, BOT_TOKEN, 0)
+        
+        # Если валидация прошла успешно (не было исключения), парсим данные.
+        parsed_data = parse_init_data(init_data_str)
+        # Библиотека возвращает удобные объекты, преобразуем в словарь.
+        return parsed_data.user.model_dump()
+        
+    except Exception as e:
+        # Если валидация провалилась, функция validate выбросит ошибку.
+        print(f"Validation failed: {e}") # Опциональный лог для отладки
         return None
 
 # --- Middleware для защиты роутов ---
@@ -87,7 +93,7 @@ def before_request_func():
         
         request.user_data = user_data
 
-# --- API Эндпоинты ---
+# --- Остальной код без изменений ---
 @app.route('/api/status', methods=['POST'])
 def get_user_status():
     user_data = request.user_data
@@ -162,7 +168,6 @@ def submit_answers():
     db.session.commit()
     return jsonify({ "message": "Profile completed successfully!", "new_points_balance": user.points, "new_invite_codes": new_invites })
 
-# --- Главная страница ---
 @app.route('/')
 def index():
     return app.send_static_file('index.html')
