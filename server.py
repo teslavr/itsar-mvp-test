@@ -8,6 +8,7 @@ import uuid
 from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.dialects.postgresql import UUID
+from init_data import InitData # <--- ИМПОРТ ИЗ НОВОЙ БИБЛИОТЕКИ
 
 # --- Конфигурация ---
 app = Flask(__name__, static_folder='static')
@@ -23,7 +24,6 @@ class User(db.Model):
     __tablename__ = 'users'
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     telegram_id = db.Column(db.BigInteger, unique=True, nullable=False)
-    # ... (остальные поля модели без изменений)
     first_name = db.Column(db.String, nullable=True)
     username = db.Column(db.String, nullable=True)
     points = db.Column(db.BigInteger, default=0)
@@ -37,7 +37,6 @@ class User(db.Model):
 class InviteCode(db.Model):
     __tablename__ = 'invite_codes'
     id = db.Column(db.Integer, primary_key=True)
-    # ... (остальные поля модели без изменений)
     code = db.Column(db.String, unique=True, nullable=False)
     owner_id = db.Column(UUID(as_uuid=True), db.ForeignKey('users.id'), nullable=False)
     is_used = db.Column(db.Boolean, default=False)
@@ -48,42 +47,27 @@ class InviteCode(db.Model):
 class GenesisAnswer(db.Model):
     __tablename__ = 'genesis_answers'
     id = db.Column(db.Integer, primary_key=True)
-    # ... (остальные поля модели без изменений)
     user_id = db.Column(UUID(as_uuid=True), db.ForeignKey('users.id'), nullable=False)
     question_id = db.Column(db.String, nullable=False)
     answer_text = db.Column(db.String, nullable=False)
     submitted_at = db.Column(db.TIMESTAMP, server_default=db.func.now())
     user = db.relationship('User', backref='genesis_answers')
 
-# --- Логика Валидации Telegram (ПОСЛЕДНЯЯ ВЕРСИЯ) ---
+# --- Логика Валидации (с использованием библиотеки) ---
 def validate_init_data(init_data_str):
     if not BOT_TOKEN:
         return None
 
     try:
-        # Разбираем строку на пары ключ-значение
-        params = {k: v for k, v in [p.split('=', 1) for p in init_data_str.split('&')]}
-        
-        received_hash = params.pop('hash', None)
-        if not received_hash:
-            return None
-        
-        # Формируем строку для проверки из ВСЕХ остальных полей, отсортированных по ключу
-        data_check_string_parts = []
-        for key in sorted(params.keys()):
-            data_check_string_parts.append(f"{key}={params[key]}")
-        
-        data_check_string = "\n".join(data_check_string_parts)
-        
-        secret_key = hmac.new("WebAppData".encode(), BOT_TOKEN.encode(), hashlib.sha256).digest()
-        calculated_hash = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
-
-        if calculated_hash == received_hash:
-            user_param = params.get('user')
-            return json.loads(unquote(user_param))
+        # Валидация с помощью библиотеки.
+        # lifetime=0 отключает проверку срока действия данных, что для нас приемлемо.
+        is_valid = InitData.validate(init_data_str, BOT_TOKEN, lifetime=0)
+        if is_valid:
+            # Парсим данные после успешной валидации
+            parsed_data = InitData.parse(init_data_str)
+            return parsed_data.user.dict()
         else:
             return None
-            
     except Exception:
         return None
 
@@ -103,7 +87,7 @@ def before_request_func():
         
         request.user_data = user_data
 
-# --- Остальной код без изменений ---
+# --- API Эндпоинты ---
 @app.route('/api/status', methods=['POST'])
 def get_user_status():
     user_data = request.user_data
@@ -178,6 +162,7 @@ def submit_answers():
     db.session.commit()
     return jsonify({ "message": "Profile completed successfully!", "new_points_balance": user.points, "new_invite_codes": new_invites })
 
+# --- Главная страница ---
 @app.route('/')
 def index():
     return app.send_static_file('index.html')
