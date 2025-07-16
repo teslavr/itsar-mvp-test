@@ -2,4 +2,3 @@ Flask
 Flask-SQLAlchemy
 psycopg2-binary
 gunicorn
-init-data-py
