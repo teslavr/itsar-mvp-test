@@ -2,7 +2,7 @@ import os
 import hmac
 import hashlib
 import json
-from urllib.parse import unquote
+from urllib.parse import parse_qsl, unquote
 import uuid
 
 from flask import Flask, request, jsonify
@@ -52,19 +52,26 @@ class GenesisAnswer(db.Model):
     submitted_at = db.Column(db.TIMESTAMP, server_default=db.func.now())
     user = db.relationship('User', backref='genesis_answers')
 
-# --- Логика Валидации Telegram (ИСПРАВЛЕННАЯ) ---
+# --- Логика Валидации Telegram (ФИНАЛЬНАЯ ИСПРАВЛЕННАЯ ВЕРСИЯ) ---
 def validate_init_data(init_data_str):
     if not BOT_TOKEN:
         return None
-    try:
-        params = {k: v for k, v in [p.split('=', 1) for p in init_data_str.split('&')]}
-        received_hash = params.pop('hash', None)
-        if not received_hash: return None
 
+    try:
+        # Используем parse_qsl для корректного парсинга URL-кодированной строки
+        # Он правильно обрабатывает все значения и возвращает список кортежей (ключ, значение)
+        parsed_data = dict(parse_qsl(init_data_str, keep_blank_values=True))
+        
+        received_hash = parsed_data.pop('hash', None)
+        if not received_hash:
+            return None
+        
+        # Формируем строку для проверки из уже раскодированных значений
         data_check_string_parts = []
-        for key in sorted(params.keys()):
+        for key in sorted(parsed_data.keys()):
+            # 'signature' был добавлен в новых версиях WebApp и не участвует в проверке
             if key != 'signature':
-                data_check_string_parts.append(f"{key}={params[key]}")
+                data_check_string_parts.append(f"{key}={parsed_data[key]}")
         
         data_check_string = "\n".join(data_check_string_parts)
         
@@ -72,35 +79,28 @@ def validate_init_data(init_data_str):
         calculated_hash = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
 
         if calculated_hash == received_hash:
-            user_param = params.get('user')
-            return json.loads(unquote(user_param))
+            return json.loads(parsed_data.get('user'))
         else:
             return None
+            
     except Exception:
         return None
 
 # --- Middleware для защиты роутов ---
 @app.before_request
 def before_request_func():
-    if request.path == '/' or request.path.startswith('/static/') or request.path == '/version':
+    if request.path == '/' or request.path.startswith('/static/'):
         return
     if request.path.startswith('/api/'):
         init_data_str = request.headers.get('X-Telegram-Init-Data')
         if not init_data_str:
             return jsonify({"error": "Unauthorized: Missing InitData"}), 401
+        
         user_data = validate_init_data(init_data_str)
         if not user_data:
             return jsonify({"error": "Unauthorized: Invalid InitData"}), 401
+        
         request.user_data = user_data
-
-# --- ПРОВЕРОЧНЫЙ ЭНДПОИНТ ---
-@app.route('/version')
-def version():
-    token_check = os.environ.get('TOKEN_CHECK', 'Token Check Not Set')
-    return jsonify({
-        "version": "1.2.0-token-check",
-        "token_check_suffix": f"...{token_check[-6:]}" if len(token_check) > 6 else token_check
-    })
 
 # --- API Эндпоинты ---
 @app.route('/api/status', methods=['POST'])
