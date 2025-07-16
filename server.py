@@ -8,7 +8,7 @@ import uuid
 from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.dialects.postgresql import UUID
-# ИСПРАВЛЕННЫЙ ИМПОРТ ИЗ БИБЛИОТЕКИ
+# Корректный импорт из библиотеки
 from init_data import validate, parse_init_data
 
 # --- Конфигурация ---
@@ -21,7 +21,6 @@ BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
 MASTER_INVITE_CODE = os.environ.get('MASTER_INVITE_CODE', 'FEUDATA-GENESIS-1')
 
 # --- Модели Базы Данных ---
-# ... (весь код моделей остается без изменений) ...
 class User(db.Model):
     __tablename__ = 'users'
     id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -55,29 +54,20 @@ class GenesisAnswer(db.Model):
     submitted_at = db.Column(db.TIMESTAMP, server_default=db.func.now())
     user = db.relationship('User', backref='genesis_answers')
 
-
-# --- Логика Валидации (с использованием библиотеки - ИСПРАВЛЕННАЯ ВЕРСИЯ) ---
+# --- Логика Валидации (с использованием библиотеки) ---
 def validate_init_data(init_data_str):
     if not BOT_TOKEN:
         return None
 
     try:
-        # Библиотека `validate` выбрасывает исключение в случае ошибки,
-        # поэтому мы оборачиваем вызов в try-except.
-        # lifetime=0 отключает проверку срока давности данных.
         validate(init_data_str, BOT_TOKEN, 0)
-        
-        # Если валидация прошла успешно (не было исключения), парсим данные.
         parsed_data = parse_init_data(init_data_str)
-        # Библиотека возвращает удобные объекты, преобразуем в словарь.
         return parsed_data.user.model_dump()
-        
     except Exception as e:
-        # Если валидация провалилась, функция validate выбросит ошибку.
-        print(f"Validation failed: {e}") # Опциональный лог для отладки
+        print(f"Validation failed: {e}")
         return None
 
-# --- Middleware для защиты роутов ---
+# --- Middleware ---
 @app.before_request
 def before_request_func():
     if request.path == '/' or request.path.startswith('/static/'):
@@ -93,7 +83,7 @@ def before_request_func():
         
         request.user_data = user_data
 
-# --- Остальной код без изменений ---
+# --- API Эндпоинты ---
 @app.route('/api/status', methods=['POST'])
 def get_user_status():
     user_data = request.user_data
