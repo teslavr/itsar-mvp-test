@@ -29,7 +29,7 @@ class User(db.Model):
     airdrop_multiplier = db.Column(db.Float, default=1.0)
     invited_by_id = db.Column(UUID(as_uuid=True), db.ForeignKey('users.id'), nullable=True)
     has_completed_genesis = db.Column(db.Boolean, default=False)
-    is_searchable = db.Column(db.Boolean, default=False)
+    is_searchable = db.Column(db.Boolean, default=True, nullable=False) # Новое поле
     created_at = db.Column(db.TIMESTAMP, server_default=db.func.now())
     inviter = db.relationship('User', remote_side=[id], backref='referrals')
 
@@ -52,18 +52,13 @@ class GenesisAnswer(db.Model):
     submitted_at = db.Column(db.TIMESTAMP, server_default=db.func.now())
     user = db.relationship('User', backref='genesis_answers')
 
-# --- Логика Валидации (ВАЛИДАЦИЯ ОТКЛЮЧЕНА) ---
-def validate_init_data(init_data_str):
-    """
-    !!! ВНИМАНИЕ: ПРОВЕРКА ОТКЛЮЧЕНА !!!
-    Эта функция просто извлекает данные пользователя без криптографической проверки.
-    """
+# --- Валидация (Отключена для MVP) ---
+def get_user_data_from_init_data(init_data_str):
     try:
         params = dict(parse_qsl(init_data_str, keep_blank_values=True))
         user_data = json.loads(params['user'])
         return user_data
     except Exception:
-        # Возвращаем фейковые данные в случае, если строка initData пришла пустой
         return {"id": 123456789, "first_name": "Test", "username": "testuser"}
 
 # --- Middleware ---
@@ -74,31 +69,31 @@ def before_request_func():
     if request.path.startswith('/api/'):
         init_data_str = request.headers.get('X-Telegram-Init-Data')
         if not init_data_str:
-            # Для локального тестирования без Telegram можно передать фейковые данные
             init_data_str = 'user={"id":12345,"first_name":"Local","username":"local_user"}'
-
-        user_data = validate_init_data(init_data_str)
+        user_data = get_user_data_from_init_data(init_data_str)
         request.user_data = user_data
-
 
 # --- API Эндпоинты ---
 @app.route('/api/status', methods=['POST'])
 def get_user_status():
     user_data = request.user_data
-    if not user_data or 'id' not in user_data:
-        return jsonify({"error": "Invalid user data"}), 400
+    if not user_data or 'id' not in user_data: return jsonify({"error": "Invalid user data"}), 400
 
     telegram_id = user_data['id']
     user = User.query.filter_by(telegram_id=telegram_id).first()
     
     if user:
         invite_codes = [ic.code for ic in InviteCode.query.filter_by(owner_id=user.id, is_used=False).all()]
-        return jsonify({ "is_new_user": False, "points": user.points, "has_completed_genesis": user.has_completed_genesis, "invite_codes": invite_codes })
+        return jsonify({ 
+            "is_new_user": False, 
+            "points": user.points, 
+            "has_completed_genesis": user.has_completed_genesis,
+            "is_searchable": user.is_searchable,
+            "invite_codes": invite_codes
+        })
 
-    # Сценарий регистрации
     invite_code = request.json.get('invite_code')
-    if not invite_code:
-        return jsonify({"error": "Invite code required for new users"}), 400
+    if not invite_code: return jsonify({"error": "Invite code required for new users"}), 400
 
     inviter = None
     if invite_code != MASTER_INVITE_CODE:
@@ -118,24 +113,12 @@ def get_user_status():
         print(f"SECURITY LOG: User {new_user.telegram_id} registered with MASTER_CODE")
 
     db.session.commit()
-    return jsonify({ "is_new_user": True, "points": new_user.points, "has_completed_genesis": False, "invite_codes": [] })
+    return jsonify({ "is_new_user": True, "points": new_user.points, "has_completed_genesis": False, "is_searchable": True, "invite_codes": [] })
 
-# ... (остальной код без изменений) ...
-@app.route('/api/genesis_questions', methods=['GET'])
-def get_genesis_questions():
-    try:
-        with open('questions.json', 'r', encoding='utf-8') as f:
-            questions = json.load(f)
-        return jsonify(questions)
-    except FileNotFoundError:
-        return jsonify({"error": "questions.json not found"}), 500
 
 @app.route('/api/submit_answers', methods=['POST'])
 def submit_answers():
-    user_data = request.user_data
-    telegram_id = user_data['id']
-    user = User.query.filter_by(telegram_id=telegram_id).first()
-
+    user = User.query.filter_by(telegram_id=request.user_data['id']).first()
     if not user: return jsonify({"error": "User not found"}), 404
     if user.has_completed_genesis: return jsonify({"error": "Genesis profile already completed"}), 400
 
@@ -153,9 +136,9 @@ def submit_answers():
         inviter = User.query.get(user.invited_by_id)
         if inviter: 
             inviter.points += 20000
-            print(f"SECURITY LOG: User {inviter.telegram_id} received 20000 points for referral of {telegram_id}")
+            print(f"SECURITY LOG: User {inviter.telegram_id} received 20000 points for referral of {user.telegram_id}")
 
-
+    # ГЕНЕРИРУЕМ 5 КОДОВ ТОЛЬКО ПОСЛЕ ЗАПОЛНЕНИЯ АНКЕТЫ
     new_invites = []
     for _ in range(5):
         new_code_str = f'FDT-{uuid.uuid4().hex[:6].upper()}'
@@ -165,6 +148,43 @@ def submit_answers():
 
     db.session.commit()
     return jsonify({ "message": "Profile completed successfully!", "new_points_balance": user.points, "new_invite_codes": new_invites })
+
+@app.route('/api/settings/privacy', methods=['POST'])
+def update_privacy_settings():
+    user = User.query.filter_by(telegram_id=request.user_data['id']).first()
+    if not user: return jsonify({"error": "User not found"}), 404
+    
+    is_searchable = request.json.get('is_searchable')
+    if is_searchable is None: return jsonify({"error": "is_searchable parameter is required"}), 400
+
+    user.is_searchable = bool(is_searchable)
+    db.session.commit()
+    return jsonify({"success": True, "is_searchable": user.is_searchable})
+
+
+@app.route('/api/user/delete', methods=['POST'])
+def delete_user():
+    user = User.query.filter_by(telegram_id=request.user_data['id']).first()
+    if not user: return jsonify({"error": "User not found"}), 404
+    
+    # Удаляем все связанные данные
+    GenesisAnswer.query.filter_by(user_id=user.id).delete()
+    InviteCode.query.filter_by(owner_id=user.id).delete()
+    # Можно добавить удаление использованных кодов, если нужно
+    
+    db.session.delete(user)
+    db.session.commit()
+    print(f"SECURITY LOG: User {user.telegram_id} has deleted their account.")
+    return jsonify({"success": True, "message": "User deleted"})
+
+
+@app.route('/api/genesis_questions', methods=['GET'])
+def get_genesis_questions():
+    try:
+        with open('questions.json', 'r', encoding='utf-8') as f:
+            questions = json.load(f)
+        return jsonify(questions)
+    except FileNotFoundError: return jsonify({"error": "questions.json not found"}), 500
 
 @app.route('/')
 def index():
