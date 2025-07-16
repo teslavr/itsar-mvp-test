@@ -14,6 +14,7 @@
             --primary-color: #D4AF37;
             --button-bg: #1A1D29;
             --button-border: #2D3142;
+            --blue-accent: #2563EB;
         }
 
         body {
@@ -24,76 +25,50 @@
             padding: 20px;
             display: flex;
             justify-content: center;
-            align-items: center;
+            align-items: flex-start;
             min-height: 100vh;
             text-align: center;
             -webkit-font-smoothing: antialiased;
             box-sizing: border-box;
         }
 
-        #app {
-            width: 100%;
-            max-width: 400px;
-        }
-        
-        .logo {
-            font-family: 'Cormorant Garamond', serif;
-            font-size: 48px;
-            font-weight: 700;
-            margin-bottom: 10px;
-        }
-
+        #app { width: 100%; max-width: 400px; }
         .screen { display: none; }
         .screen.active { display: block; }
-
+        
+        .logo-font { font-family: 'Cormorant Garamond', serif; }
+        h1.logo { font-size: 48px; font-weight: 700; }
         h2 { font-size: 20px; font-weight: 600; margin-bottom: 24px; }
         p { font-size: 14px; line-height: 1.5; }
         
-        .question-container { margin-bottom: 30px; }
+        .header { display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 32px; }
+        .logo-container { display: flex; align-items: flex-end; justify-content: center; gap: 0.5rem; }
+        .logo-icon { height: 40px; width: 40px; border-radius: 9999px; margin-bottom: 4px; }
         
-        .options-grid {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 12px;
-        }
+        .settings-icon { color: #6B7280; cursor: pointer; }
+        .settings-icon:hover { color: var(--text-color); }
 
-        .option-button {
-            background-color: var(--button-bg);
-            border: 1px solid var(--button-border);
-            color: var(--text-color);
-            padding: 16px;
-            border-radius: 12px;
-            font-size: 16px;
-            cursor: pointer;
-            width: 100%;
-            text-align: left;
-            transition: background-color 0.2s, border-color 0.2s;
-        }
-        .option-button:hover {
-            background-color: var(--button-border);
-        }
+        .main-card { background-color: var(--button-bg); padding: 24px; border-radius: 1rem; }
+        .question-card { background-color: var(--button-bg); padding: 24px; border-radius: 1rem; }
+        
+        .action-button { width: 100%; background-color: var(--blue-accent); color: white; font-weight: bold; padding: 12px 16px; border-radius: 0.5rem; transition: background-color 0.2s; }
+        .action-button:hover { background-color: #1D4ED8; }
+        
+        .option-button { width: 100%; text-align: center; padding: 12px; border-radius: 0.5rem; transition: background-color 0.2s; background-color: var(--button-bg); border: 1px solid var(--button-border); }
+        .option-button:hover { background-color: var(--button-border); }
+        .option-button.selected { background-color: var(--blue-accent); border-color: var(--blue-accent); color: white; }
 
-        .input-field {
-            width: 100%;
-            padding: 16px;
-            background-color: var(--button-bg);
-            border: 1px solid var(--button-border);
-            border-radius: 12px;
-            color: var(--text-color);
-            font-size: 16px;
-            box-sizing: border-box;
-        }
-
-        .spinner {
-            border: 4px solid rgba(255, 255, 255, 0.2);
-            border-radius: 50%;
-            border-top-color: var(--text-color);
-            width: 24px;
-            height: 24px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto;
-        }
+        .input-field { width: 100%; padding: 16px; background-color: var(--button-bg); border: 1px solid var(--button-border); border-radius: 12px; color: var(--text-color); font-size: 16px; box-sizing: border-box; }
+        .spinner { border: 4px solid rgba(255, 255, 255, 0.2); border-radius: 50%; border-top-color: var(--text-color); width: 24px; height: 24px; animation: spin 1s linear infinite; margin: 0 auto; }
         @keyframes spin { to { transform: rotate(360deg); } }
+        
+        /* Стили для переключателя */
+        .switch { position: relative; display: inline-block; width: 60px; height: 34px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 34px; }
+        .slider:before { position: absolute; content: ""; height: 26px; width: 26px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background-color: var(--blue-accent); }
+        input:checked + .slider:before { transform: translateX(26px); }
 
     </style>
 </head>
@@ -101,33 +76,59 @@
 
 <div id="app">
     <div id="loading-screen" class="screen active">
-        <h1 class="logo">FEUDĀTA</h1>
+        <div class="logo-container mb-4"><h1 class="logo logo-font">Feudāta</h1><img src="https://i.imgur.com/YrnQETI.jpeg" alt="Иконка" class="logo-icon"></div>
         <p>Проверка вашего статуса...</p>
-        <div class="spinner"></div>
+        <div class="spinner mt-4"></div>
     </div>
 
     <div id="welcome-screen" class="screen">
-        <h1 class="logo">FEUDĀTA</h1>
-        <h2>Добро пожаловать в Клуб Основателей</h2>
+        <div class="logo-container mb-4"><h1 class="logo logo-font">Feudāta</h1><img src="https://i.imgur.com/YrnQETI.jpeg" alt="Иконка" class="logo-icon"></div>
+        <h2>Добро пожаловать</h2>
         <p>Для доступа к платформе, пожалуйста, введите ваш инвайт-код.</p>
         <input type="text" id="invite-code-input" class="input-field" placeholder="XXXX-XXXX" style="margin-top: 20px; text-transform: uppercase;">
-        <button id="submit-invite-button" class="option-button" style="margin-top: 12px; text-align: center;">Войти</button>
+        <button id="submit-invite-button" class="action-button" style="margin-top: 12px;">Войти</button>
         <p id="invite-error" style="color: #ff4d4d; display: none; margin-top: 10px;"></p>
     </div>
 
-    <div id="genesis-screen" class="screen">
-        <div id="question-container" class="question-container">
-            </div>
+    <div id="dashboard-screen" class="screen">
+        <div class="header">
+            <div class="logo-container"><h1 class="logo-font text-4xl font-bold tracking-wider">Feudāta</h1><img src="https://i.imgur.com/YrnQETI.jpeg" alt="Иконка" class="logo-icon"></div>
+            <button id="open-settings-button" class="settings-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+            </button>
+        </div>
+        <div class="main-card">
+            <h2 class="text-lg font-semibold text-white mb-2" id="greeting">Привет, Сергей!</h2>
+            <p class="text-gray-400 mb-6">Ваш баланс: <b id="points-balance">0</b> Очков.</p>
+            <button id="start-genesis-button" class="action-button">Пройти Генезис-Профиль</button>
+        </div>
     </div>
 
-    <div id="dashboard-screen" class="screen">
-        <h1 class="logo">FEUDĀTA</h1>
-        <h2>Ваш Профиль</h2>
-        <p>Очки: <b id="points-balance">0</b></p>
-        <p>Инвайт-коды:</p>
-        <div id="invite-codes-list"></div>
-        <button id="start-genesis-button" class="option-button" style="margin-top: 20px; text-align: center;">Пройти Генезис-Профиль</button>
+    <div id="genesis-screen" class="screen">
+        <div id="question-container" class="question-card"></div>
     </div>
+    
+    <div id="settings-screen" class="screen">
+        <h2 class="text-2xl font-semibold mb-6">Настройки</h2>
+        <div class="text-left space-y-4">
+            <div>
+                <h3 class="font-semibold mb-2">Ваши инвайт-коды:</h3>
+                <div id="invite-codes-list" class="space-y-2 text-gray-400"></div>
+            </div>
+            <div class="flex justify-between items-center">
+                <label for="privacy-toggle" class="font-semibold">Профиль доступен для поиска</label>
+                <label class="switch">
+                    <input type="checkbox" id="privacy-toggle">
+                    <span class="slider"></span>
+                </label>
+            </div>
+             <div>
+                <button id="delete-profile-button" class="w-full text-center p-3 rounded-lg transition bg-red-600/20 text-red-400 hover:bg-red-600/40">Удалить профиль</button>
+            </div>
+        </div>
+         <button id="close-settings-button" class="action-button mt-8">Закрыть</button>
+    </div>
+
 </div>
 
 <script>
@@ -138,12 +139,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const screens = {
         loading: document.getElementById('loading-screen'),
         welcome: document.getElementById('welcome-screen'),
-        genesis: document.getElementById('genesis-screen'),
         dashboard: document.getElementById('dashboard-screen'),
+        genesis: document.getElementById('genesis-screen'),
+        settings: document.getElementById('settings-screen'),
     };
 
     const state = {
-        initData: tg.initData,
+        initData: tg.initData || '',
         questions: [],
         answers: [],
         currentQuestionIndex: 0,
@@ -155,15 +157,14 @@ document.addEventListener('DOMContentLoaded', () => {
         screens[screenName].classList.add('active');
     }
 
-    async function apiCall(endpoint, method = 'GET', body = null) {
-        const headers = {
-            'Content-Type': 'application/json',
-            'X-Telegram-Init-Data': state.initData,
-        };
+    async function apiCall(endpoint, method = 'POST', body = null) {
         try {
             const response = await fetch(endpoint, {
                 method,
-                headers,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Telegram-Init-Data': state.initData,
+                },
                 body: body ? JSON.stringify(body) : null,
             });
             if (!response.ok) {
@@ -183,22 +184,18 @@ document.addEventListener('DOMContentLoaded', () => {
             submitGenesisProfile();
             return;
         }
-
         const question = state.questions[state.currentQuestionIndex];
         const container = document.getElementById('question-container');
         container.innerHTML = `
-            <h2>${question.text} (${state.currentQuestionIndex + 1}/${state.questions.length})</h2>
-            <div class="options-grid">
-                ${question.options.map((opt, index) => `<button class="option-button" data-value="${opt}">${opt}</button>`).join('')}
+            <p class="text-gray-400 mb-2">Вопрос ${state.currentQuestionIndex + 1} / ${state.questions.length}</p>
+            <h2 class="text-xl font-semibold text-white mb-6">${question.text}</h2>
+            <div class="space-y-3">
+                ${question.options.map(opt => `<button class="option-button" data-value="${opt}">${opt}</button>`).join('')}
             </div>
         `;
-
         container.querySelectorAll('.option-button').forEach(button => {
-            button.addEventListener('click', () => {
-                state.answers.push({
-                    question_id: question.id,
-                    answer: button.dataset.value
-                });
+            button.addEventListener('click', (e) => {
+                state.answers.push({ question_id: question.id, answer: e.target.dataset.value });
                 state.currentQuestionIndex++;
                 renderQuestion();
             });
@@ -206,20 +203,19 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function submitGenesisProfile() {
-        showScreen('loading'); // Показываем экран загрузки во время отправки
+        showScreen('loading');
         const result = await apiCall('/api/submit_answers', 'POST', { answers: state.answers });
         if (result) {
-            alert('Профиль успешно заполнен! Вам начислены очки и выданы инвайт-коды.');
-            await checkUserStatus(); // Обновляем статус, чтобы показать новые данные
+            alert('Профиль успешно заполнен! Вам начислены очки и 5 инвайт-кодов.');
+            await checkUserStatus();
         } else {
-             // Если ошибка, возвращаемся на дашборд
             showScreen('dashboard');
         }
     }
     
     async function startGenesisProfile() {
         showScreen('loading');
-        const questionsData = await apiCall('/api/genesis_questions');
+        const questionsData = await fetch('/api/genesis_questions').then(res => res.json());
         if (questionsData) {
             state.questions = questionsData;
             state.answers = [];
@@ -227,12 +223,25 @@ document.addEventListener('DOMContentLoaded', () => {
             showScreen('genesis');
             renderQuestion();
         } else {
-            showScreen('dashboard'); // Если не удалось загрузить вопросы, вернуть на дашборд
+            showScreen('dashboard');
         }
     }
-
+    
     function updateDashboard() {
+        document.getElementById('greeting').textContent = `Привет, ${tg.initDataUnsafe?.user?.first_name || 'Пользователь'}!`;
         document.getElementById('points-balance').textContent = state.userStatus.points;
+        
+        const genesisButton = document.getElementById('start-genesis-button');
+        if (state.userStatus.has_completed_genesis) {
+            genesisButton.style.display = 'none';
+        } else {
+            genesisButton.style.display = 'block';
+            genesisButton.onclick = startGenesisProfile;
+        }
+        showScreen('dashboard');
+    }
+
+    function updateSettings() {
         const codesContainer = document.getElementById('invite-codes-list');
         codesContainer.innerHTML = '';
         if (state.userStatus.invite_codes.length > 0) {
@@ -245,17 +254,10 @@ document.addEventListener('DOMContentLoaded', () => {
             codesContainer.innerHTML = '<p>У вас пока нет инвайт-кодов.</p>';
         }
 
-        const genesisButton = document.getElementById('start-genesis-button');
-        if (state.userStatus.has_completed_genesis) {
-            genesisButton.style.display = 'none';
-        } else {
-            genesisButton.style.display = 'block';
-            genesisButton.onclick = startGenesisProfile;
-        }
-        
-        showScreen('dashboard');
+        const privacyToggle = document.getElementById('privacy-toggle');
+        privacyToggle.checked = state.userStatus.is_searchable;
     }
-
+    
     async function checkUserStatus(inviteCode = null) {
         showScreen('loading');
         const body = inviteCode ? { invite_code: inviteCode } : {};
@@ -263,30 +265,54 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (status) {
             state.userStatus = status;
-            if (status.error) {
-                 // Если сервер вернул ошибку, например "нужен инвайт"
+            if (status.is_new_user === undefined && status.error) {
                 showScreen('welcome');
-                if (inviteCode) { // Показываем ошибку только если была попытка ввода кода
-                    const errorEl = document.getElementById('invite-error');
-                    errorEl.textContent = status.error;
-                    errorEl.style.display = 'block';
+                if (inviteCode) {
+                    document.getElementById('invite-error').textContent = status.error;
+                    document.getElementById('invite-error').style.display = 'block';
                 }
             } else {
                 updateDashboard();
+                updateSettings();
             }
         } else {
-            // Если status is null, значит была сетевая ошибка или 500,
-            // в этом случае остаемся на экране приглашения
             showScreen('welcome');
-            alert('Не удалось связаться с сервером. Попробуйте позже.');
         }
     }
 
+    // --- Event Listeners ---
     document.getElementById('submit-invite-button').addEventListener('click', () => {
-        const inviteCode = document.getElementById('invite-code-input').value.trim();
+        const inviteCode = document.getElementById('invite-code-input').value.trim().toUpperCase();
         if (inviteCode) {
             document.getElementById('invite-error').style.display = 'none';
             checkUserStatus(inviteCode);
+        }
+    });
+    
+    document.getElementById('open-settings-button').addEventListener('click', () => showScreen('settings'));
+    document.getElementById('close-settings-button').addEventListener('click', () => showScreen('dashboard'));
+
+    document.getElementById('privacy-toggle').addEventListener('change', async (e) => {
+        const is_searchable = e.target.checked;
+        const result = await apiCall('/api/settings/privacy', 'POST', { is_searchable });
+        if(result) {
+            state.userStatus.is_searchable = result.is_searchable;
+        } else {
+            // Revert toggle on failure
+            e.target.checked = !is_searchable;
+        }
+    });
+
+    document.getElementById('delete-profile-button').addEventListener('click', async () => {
+        if (confirm('Вы уверены, что хотите удалить свой профиль? Это действие необратимо.')) {
+            const result = await apiCall('/api/user/delete', 'POST');
+            if(result && result.success) {
+                alert('Ваш профиль был удален.');
+                // Показываем экран приветствия, как для нового пользователя
+                showScreen('welcome');
+            } else {
+                alert('Не удалось удалить профиль.');
+            }
         }
     });
 
