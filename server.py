@@ -8,9 +8,6 @@ import uuid
 from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.dialects.postgresql import UUID
-# ФИНАЛЬНЫЙ ИСПРАВЛЕННЫЙ ИМПОРТ ИЗ БИБЛИОТЕКИ
-from init_data_py.validator import validate
-from init_data_py.parser import parse_init_data
 
 # --- Конфигурация ---
 app = Flask(__name__, static_folder='static')
@@ -55,21 +52,42 @@ class GenesisAnswer(db.Model):
     submitted_at = db.Column(db.TIMESTAMP, server_default=db.func.now())
     user = db.relationship('User', backref='genesis_answers')
 
-# --- Логика Валидации (с использованием библиотеки) ---
+# --- Логика Валидации (самописная, корректная версия) ---
 def validate_init_data(init_data_str):
     if not BOT_TOKEN:
         return None
 
     try:
-        # lifetime=0 отключает проверку срока действия данных
-        validate(init_data_str, BOT_TOKEN, 0)
+        # Разбираем строку на пары ключ-значение
+        params = sorted([p.split('=', 1) for p in init_data_str.split('&')])
         
-        parsed_data = parse_init_data(init_data_str)
-        # Убедимся, что user не None и преобразуем в словарь
-        if parsed_data.user:
-            return parsed_data.user.model_dump()
-        return None
+        received_hash = ''
+        data_check_string_parts = []
         
+        for pair in params:
+            key = pair[0]
+            value = pair[1]
+            if key == 'hash':
+                received_hash = value
+            else:
+                data_check_string_parts.append(f"{key}={value}")
+        
+        data_check_string = "\n".join(data_check_string_parts)
+        
+        secret_key = hmac.new("WebAppData".encode(), BOT_TOKEN.encode(), hashlib.sha256).digest()
+        calculated_hash = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
+
+        if calculated_hash == received_hash:
+            # Находим параметр user в исходных данных для извлечения
+            user_data = {}
+            for pair in params:
+                if pair[0] == 'user':
+                    user_data = json.loads(unquote(pair[1]))
+                    break
+            return user_data
+        else:
+            return None
+            
     except Exception as e:
         print(f"Validation failed with exception: {e}")
         return None
@@ -91,7 +109,6 @@ def before_request_func():
         request.user_data = user_data
 
 # --- API Эндпоинты ---
-# ... (остальной код без изменений) ...
 @app.route('/api/status', methods=['POST'])
 def get_user_status():
     user_data = request.user_data
@@ -165,7 +182,6 @@ def submit_answers():
 
     db.session.commit()
     return jsonify({ "message": "Profile completed successfully!", "new_points_balance": user.points, "new_invite_codes": new_invites })
-
 
 # --- Главная страница ---
 @app.route('/')
